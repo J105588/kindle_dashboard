@@ -5,6 +5,8 @@
 
 # ---- 配信サーバー（PCで serve.py を起動したときに表示されるURL）----
 SERVER_URL="http://192.168.1.134:8080"
+# PC なしで使う場合（GitHub Actions が描画して公開。README「PCなしで動かす」参照）
+#SERVER_URL="https://j105588.github.io/kindle_dashboard"
 
 # ---- サイネージ（Signage: Start で起動）----
 # dashboard … 時計・カレンダー・天気（サーバーが必要）

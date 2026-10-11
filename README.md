@@ -146,6 +146,31 @@ server/                       ← PC側
 
 画像だけを使うモード（`slides` / スクリーンセーバーの `images`）は Wi-Fi 不要なので、機内モードのままで使えます。
 
+### 3-4. PCなしで動かす（GitHub Actions）
+
+PCの電源が切れていても、PCが別の場所にあっても、ダッシュボードを更新し続けられます。GitHub が10分ごとに `render.py` を実行し、できた画像を GitHub Pages で公開します。Kindle は自宅のWi-Fiからインターネット経由でその画像を取りに行きます。
+
+```
+GitHub Actions（10分ごと）── render.py ──→ GitHub Pages ←── Kindle（自宅Wi-Fi → インターネット）
+```
+
+1. このリポジトリを GitHub で **Public** にします。無料で使うための条件です。`server/config.json` の地点と Kindle のIPも公開されるので、気になる値は書き換えておいてください。
+2. GitHub のリポジトリで **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にします。
+3. `git push` したら、**Actions → Dashboard → Run workflow** で1回手動実行します。成功すれば、`https://<ユーザー名>.github.io/kindle_dashboard/dashboard.png` で画像が見られます。
+4. Kindle の `SERVER_URL` をそのURLに変えます。
+   ```
+   python kindlectl.py set SERVER_URL https://<ユーザー名>.github.io/kindle_dashboard
+   ```
+   USBで編集する場合は、`config.sh` のコメントにしてある行を有効にしてください。
+5. KUAL の **Status** で `Server: OK` と出れば完了です。PCの `serve.py` は止めて構いません。
+
+- 地点などを変えるときは `server/config.json` を編集して push します。次の実行から反映されます。
+- GitHub の定期実行は混雑すると数分遅れることがあります。時計は Kindle が毎分進めるので、遅れるのは天気と日付の切り替わりだけです。
+- 公開リポジトリは60日間更新が無いと、定期実行が自動で止められます。これを防ぐため、毎週月曜に同じワークフローが自分自身を有効化し直します。もし止まってしまったら、Actions 画面の **Enable workflow** で再開できます。
+- 古いファームウェアの Kindle では HTTPS の証明書を確認できないことがあります。その場合は自動で、確認なしで取り直します。
+- PC 版に戻すときは、`SERVER_URL` を `http://192.168.x.x:8080` に戻すだけです。
+- スマホからのアップロード（`/upload`）と `kindlectl.py` は、これまでどおり同じWi-Fi内のPCから使います。
+
 ---
 
 ## 4. 使い方
@@ -213,6 +238,7 @@ python convert_images.py 写真フォルダ --kindle E:/ --to slides --fit conta
 |---|---|
 | KUALに Signage が出ない | `extensions/signage/config.xml` があるか |
 | 「Cannot reach …」と出る | PCで serve.py が動いているか / `SERVER_URL` / ファイアウォール / Kindleの機内モード |
+| GitHub Pages 版で更新されない | GitHub の Actions 画面で Dashboard が失敗していないか / 止められていないか（Enable workflow） |
 | 時計が9時間ずれる | `config.sh` の `TZ_OFFSET_MIN` を `0` に |
 | 何も起きない | `.sh` の改行コードが LF か / `signage/signage.log` を確認 |
 | スクリーンセーバーが変わらない | Status で ON か確認（再起動後は OFF に戻ります）/ 画像が `signage/screensaver` にあるか |

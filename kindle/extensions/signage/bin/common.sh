@@ -47,7 +47,10 @@ is_running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 download() { # URL 保存先
   rm -f "$2.part"
   if command -v curl >/dev/null 2>&1; then
-    curl -s -f -m 25 -o "$2.part" "$1"
+    # 古いファームの CA 証明書では GitHub Pages などの HTTPS を検証できないことがあるので、
+    # 失敗したときだけ検証なしで取り直す（取るのは公開画像だけ）
+    curl -s -f -L -m 25 -o "$2.part" "$1" ||
+      case $1 in https:*) curl -s -f -L -k -m 25 -o "$2.part" "$1" ;; esac
   else
     wget -q -O "$2.part" "$1"
   fi

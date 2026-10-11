@@ -1,0 +1,90 @@
+name: Dashboard
+
+on:
+  schedule:
+    # 毎時ちょうど前後は Open-Meteo が混むので避けた分に置く（GitHub 側の遅延で数分ずれることはある）
+    - cron: "5,15,25,35,45,55 * * * *"
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+
+concurrency:
+  group: dashboard
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Restore font
+        id: font
+        uses: actions/cache@v4
+        with:
+          path: server/fonts/NotoSansJP-VariableFont_wght.ttf
+          key: font-notosansjp-v1
+
+      - name: Download font
+        if: steps.font.outputs.cache-hit != 'true'
+        run: curl -fsSL -o fonts/NotoSansJP-VariableFont_wght.ttf "https://github.com/google/fonts/raw/main/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf"
+
+      # 実行ごとに新しい環境になるので、天気の取得失敗時に前回データで描けるよう持ち越す
+      - name: Restore weather cache
+        uses: actions/cache/restore@v4
+        with:
+          path: server/out/weather_cache.json
+          key: weather-${{ github.run_id }}
+          restore-keys: weather-
+
+      - run: python render.py --refresh-weather
+
+      - name: Save weather cache
+        if: hashFiles('server/out/weather_cache.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: server/out/weather_cache.json
+          key: weather-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Build site
+        run: |
+          mkdir -p ../_site/clock
+          cp out/dashboard.png out/layout.txt ../_site/
+          cp out/clock/*.png ../_site/clock/
+          touch ../_site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  # 公開リポジトリは 60 日間更新が無いと定期実行が止められるので、週1で有効化 API を叩いて期限をリセットする
+  keepalive:
+    if: github.event.schedule == '17 3 * * 1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/dashboard.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}

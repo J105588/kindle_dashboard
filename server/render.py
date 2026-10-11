@@ -672,11 +672,22 @@ def main():
     ap.add_argument("--demo", action="store_true", help="ダミーの天気で描画（ネット不要）")
     ap.add_argument("--out", default=os.path.join(HERE, "out"))
     ap.add_argument("--device", help="pw3 / voyage / kt2 / pw2（config.json より優先）")
+    ap.add_argument("--refresh-weather", action="store_true",
+                    help="保存済みの天気が weather_minutes より古ければ取り直す（GitHub Actions 用）")
     a = ap.parse_args()
     cfg = load_config()
     if a.device:
         cfg["device"] = a.device
     os.makedirs(a.out, exist_ok=True)
+    if a.refresh_weather and not a.demo:
+        # serve.py の weather_loop の代わり。これが無いと load_weather は 45 分までキャッシュを使い続ける
+        now = dt.datetime.now(ZoneInfo(cfg["timezone"]))
+        age = _cache_age(os.path.join(a.out, "weather_cache.json"), now)
+        stale = age is None or age >= dt.timedelta(minutes=int(cfg.get("weather_minutes", 30)))
+        if stale and 2 < now.minute < 58:
+            err = update_weather(cfg, a.out, now)
+            if err:
+                print(f"[warn] 天気: {err}", file=sys.stderr)
     save(a.out, *render(cfg, a.out, a.demo))
     print(f"描画しました → {a.out}")
 
