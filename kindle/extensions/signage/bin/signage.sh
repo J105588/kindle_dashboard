@@ -77,6 +77,7 @@ while :; do
   if [ $((now - last)) -ge $((DASH_REFRESH_MIN * 60)) ]; then
     if fetch_dashboard; then
       fail=0; last=$now
+      time_sync
     else
       fail=$((fail + 1))
       # 失敗したら1分後にもう一度（何度も失敗したら間隔を空ける）

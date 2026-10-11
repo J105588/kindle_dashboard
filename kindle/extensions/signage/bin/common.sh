@@ -19,6 +19,8 @@ SS_BIND=/var/tmp/signage_ssbind         # native 方式で標準画像の代わ�
 # 古い config.sh に無い項目の既定値
 : "${SS_DELAY:=1}" "${SS_REDRAW:=3}" "${FREEZE_UI:=1}" "${SS_REFRESH_MIN:=0}"
 : "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=5}"
+: "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}"
+TIME_SYNC_STAMP=/var/tmp/signage_timesync
 mkdir -p "$CACHE/clock" "$DATA/slides" "$DATA/screensaver"
 
 log() {
@@ -81,6 +83,20 @@ fetch_dashboard() {
   mv "$CACHE/layout.new" "$CACHE/layout.txt"
   download "$SERVER_URL/dashboard.png" "$CACHE/dashboard.png" || { log "dashboard download failed"; return 1; }
   return 0
+}
+
+# Kindle の時計は数秒ずれていくことがあるので、TIME_SYNC_MIN ごとに NTP で合わせる
+time_sync() {
+  [ -n "$NTP_SERVER" ] && command -v ntpdate >/dev/null 2>&1 || return 0
+  _last=$(cat "$TIME_SYNC_STAMP" 2>/dev/null || echo 0)
+  [ $(( $(date +%s) - _last )) -ge $((TIME_SYNC_MIN * 60)) ] || return 0
+  # -u: 他の時刻サービスと 123 番ポートを取り合わない / -b: 少しずつではなく一度で合わせる
+  if _r=$(ntpdate -b -u -p 2 "$NTP_SERVER" 2>&1); then
+    log "time sync: $(echo "$_r" | grep -o 'offset [-0-9.]*' | tail -1)"
+  else
+    log "time sync failed: $(echo "$_r" | tail -1)"
+  fi
+  date +%s > "$TIME_SYNC_STAMP"
 }
 
 # ---- 時計 ----
