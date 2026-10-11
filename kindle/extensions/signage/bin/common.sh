@@ -18,7 +18,7 @@ SS_BIND=/var/tmp/signage_ssbind         # native 方式で標準画像の代わ�
 . "$EXT/config.sh"
 # 古い config.sh に無い項目の既定値
 : "${SS_DELAY:=1}" "${SS_REDRAW:=3}" "${FREEZE_UI:=1}" "${SS_REFRESH_MIN:=0}"
-: "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}"
+: "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=5}"
 mkdir -p "$CACHE/clock" "$DATA/slides" "$DATA/screensaver"
 
 log() {
@@ -111,6 +111,28 @@ draw_dashboard() { # 全面リフレッシュで背景を描き、時計を重�
   [ -f "$CACHE/dashboard.png" ] || return 1
   eips -f -g "$CACHE/dashboard.png" >/dev/null 2>&1
   draw_clock "" >/dev/null
+}
+
+# ---- 電池残量 ----
+batt_level() {
+  _b=$(lipc-get-prop com.lab126.powerd battLevel 2>/dev/null)
+  [ -n "$_b" ] || _b=$(gasgauge-info -c 2>/dev/null | tr -dc '0-9')
+  echo "${_b:-100}"
+}
+
+# 充電中は出さない
+batt_low() {
+  [ "$BATT_LOW_PCT" -gt 0 ] 2>/dev/null || return 1
+  [ "$(lipc-get-prop com.lab126.powerd isCharging 2>/dev/null)" = "1" ] && return 1
+  [ "$(batt_level)" -le "$BATT_LOW_PCT" ] 2>/dev/null
+}
+
+# 右上に電池残量低下マーク（x は 8 の倍数にそろえる）
+draw_batt_icon() {
+  [ -f "$EXT/img/batt_low.png" ] || return 1
+  _w=$(eips -i 2>/dev/null | awk '$1=="xres:"{print $2; exit}')
+  _x=$(( (${_w:-1072} - 136) / 8 * 8 ))
+  eips -g "$EXT/img/batt_low.png" -x "$_x" -y 24 >/dev/null 2>&1
 }
 
 # ---- スクリーンセーバー native 方式 ----

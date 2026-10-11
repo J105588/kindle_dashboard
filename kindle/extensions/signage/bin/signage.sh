@@ -50,12 +50,16 @@ if [ "$FREEZE_UI" = "1" ] && [ "$grabbed" = "1" ]; then
   killall -STOP cvm 2>/dev/null && { echo 1 > "$FROZEN_FLAG"; log "UI paused"; }
 fi
 
+# cvm を止めても上部ステータスバー（電池・時刻）は pillow が別に描き直すので隠す
+lipc-set-prop com.lab126.pillow disableEnablePillow disable 2>/dev/null
+
 # ---- 画像スライドショー ----
 if [ "$SIGNAGE_SOURCE" = "slides" ]; then
   while :; do
     f=$(next_image "$DATA/slides" "$CACHE/slide_index" sequential)
     if [ -n "$f" ]; then
       eips -f -g "$f" >/dev/null 2>&1
+      batt_low && draw_batt_icon
     else
       eips -c; msg "No PNG images in /mnt/us/signage/slides" 10
     fi
@@ -65,7 +69,7 @@ fi
 
 # ---- ダッシュボード ----
 [ "$WIFI_AUTO_ON" = "1" ] && wifi_wait 30
-last=0; fail=0; prev=""
+last=0; fail=0; prev=""; batt_on=0
 while :; do
   now=$(date +%s)
   if [ $((now - last)) -ge $((DASH_REFRESH_MIN * 60)) ]; then
@@ -76,6 +80,7 @@ while :; do
       # 失敗したら1分後にもう一度（何度も失敗したら間隔を空ける）
       if [ "$fail" -lt 5 ]; then last=$((now - DASH_REFRESH_MIN * 60 + 60)); else last=$now; fi
     fi
+    batt_on=0
     if draw_dashboard; then
       prev=$(now_hhmm)
       [ "$fail" -ge 3 ] && msg "offline - showing last data" 1
@@ -85,6 +90,13 @@ while :; do
     fi
   elif [ -n "$prev" ]; then
     prev=$(draw_clock "$prev")
+  fi
+  if batt_low; then
+    [ "$batt_on" = "1" ] || { draw_batt_icon; batt_on=1; }
+  elif [ "$batt_on" = "1" ]; then
+    # 充電などで回復したらマークを消すために描き直す
+    batt_on=0
+    draw_dashboard && prev=$(now_hhmm)
   fi
   s=$(date +%s)
   sleep $((60 - s % 60)) & wait $!   # 次の「00秒」まで待つ（止められたらすぐ抜ける）
