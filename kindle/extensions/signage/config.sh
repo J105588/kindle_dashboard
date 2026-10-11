@@ -13,7 +13,8 @@ SERVER_URL="http://192.168.1.134:8080"
 # slides    … /mnt/us/signage/slides の画像を順番に表示（サーバー不要）
 SIGNAGE_SOURCE=dashboard
 
-DASH_REFRESH_MIN=10     # 背景（天気・カレンダー）を取り直す間隔（分）
+DASH_REFRESH_MIN=10     # 背景（天気・カレンダー）を取り直す間隔（分）。60 を割り切れる値に
+DASH_REFRESH_OFFSET=9   # 取り直す分のずれ。10分間隔なら 09,19,29…分に取る（GitHub Actions の公開直後）
 SLIDE_INTERVAL=60       # slides のとき 1枚あたりの秒数
 
 # Kindle内部の時計は世界標準時(UTC)のことが多いので、日本時間との差を分で指定

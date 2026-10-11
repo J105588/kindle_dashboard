@@ -71,17 +71,17 @@ fi
 
 # ---- ダッシュボード ----
 [ "$WIFI_AUTO_ON" = "1" ] && wifi_wait 30
-last=0; fail=0; prev=""; batt_on=0
+last=-1; fail=0; prev=""; batt_on=0
 while :; do
-  now=$(date +%s)
-  if [ $((now - last)) -ge $((DASH_REFRESH_MIN * 60)) ]; then
+  slot=$(refresh_slot)
+  if [ "$slot" != "$last" ]; then
     if fetch_dashboard; then
-      fail=0; last=$now
+      fail=0; last=$slot
       time_sync
     else
       fail=$((fail + 1))
-      # 失敗したら1分後にもう一度（何度も失敗したら間隔を空ける）
-      if [ "$fail" -lt 5 ]; then last=$((now - DASH_REFRESH_MIN * 60 + 60)); else last=$now; fi
+      # 失敗したら1分後にもう一度（何度も失敗したら次の取得時刻まで待つ）
+      [ "$fail" -lt 5 ] || last=$slot
     fi
     batt_on=0
     if draw_dashboard; then

@@ -19,7 +19,7 @@ SS_BIND=/var/tmp/signage_ssbind         # native 方式で標準画像の代わ�
 # 古い config.sh に無い項目の既定値
 : "${SS_DELAY:=1}" "${SS_REDRAW:=3}" "${FREEZE_UI:=1}" "${SS_REFRESH_MIN:=0}"
 : "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=5}"
-: "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}"
+: "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}" "${DASH_REFRESH_OFFSET:=9}"
 TIME_SYNC_STAMP=/var/tmp/signage_timesync
 mkdir -p "$CACHE/clock" "$DATA/slides" "$DATA/screensaver"
 
@@ -97,6 +97,13 @@ time_sync() {
     log "time sync failed: $(echo "$_r" | tail -1)"
   fi
   date +%s > "$TIME_SYNC_STAMP"
+}
+
+# 背景を取り直す区切りの番号。開始時刻からではなく時計の分にそろえて進めることで、
+# GitHub Actions が公開し終わった直後（10分間隔・オフセット9なら 09,19,…,59分）に取りに行ける
+refresh_slot() {
+  _m=$(( ($(date +%s) + TZ_OFFSET_MIN * 60) / 60 - DASH_REFRESH_OFFSET ))
+  echo $(( _m / DASH_REFRESH_MIN ))
 }
 
 # ---- 時計 ----
