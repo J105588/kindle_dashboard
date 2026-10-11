@@ -1,9 +1,10 @@
 name: Dashboard
 
 on:
+  # 10分ごとの更新は外部の cron（cron-job.org など）が workflow_dispatch を API で呼ぶ。
+  # GitHub の schedule は数十分〜数時間遅れることがあるので、外部が止まったときの保険として1時間ごとだけ残す
   schedule:
-    # 毎時ちょうど前後は Open-Meteo が混むので避けた分に置く（GitHub 側の遅延で数分ずれることはある）
-    - cron: "5,15,25,35,45,55 * * * *"
+    - cron: "35 * * * *"
     - cron: "17 3 * * 1"
   workflow_dispatch:
 
@@ -82,7 +83,8 @@ jobs:
 
   # 公開リポジトリは 60 日間更新が無いと定期実行が止められるので、週1で有効化 API を叩いて期限をリセットする
   keepalive:
-    if: github.event.schedule == '17 3 * * 1' || github.event_name == 'workflow_dispatch'
+    # workflow_dispatch は外部から10分ごとに来るので、ここでは週1の schedule のときだけ動かす
+    if: github.event.schedule == '17 3 * * 1'
     runs-on: ubuntu-latest
     steps:
       - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/dashboard.yml/enable"

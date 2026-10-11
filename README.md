@@ -148,11 +148,13 @@ server/                       ← PC側
 
 ### 3-4. PCなしで動かす（GitHub Actions）
 
-PCの電源が切れていても、PCが別の場所にあっても、ダッシュボードを更新し続けられます。GitHub が10分ごとに `render.py` を実行し、できた画像を GitHub Pages で公開します。Kindle は自宅のWi-Fiからインターネット経由でその画像を取りに行きます。
+PCの電源が切れていても、PCが別の場所にあっても、ダッシュボードを更新し続けられます。外部の cron サービスが10分ごとに GitHub Actions を呼び出し、Actions が `render.py` を実行して、できた画像を GitHub Pages で公開します。Kindle は自宅のWi-Fiからインターネット経由でその画像を取りに行きます。
 
 ```
-GitHub Actions（10分ごと）── render.py ──→ GitHub Pages ←── Kindle（自宅Wi-Fi → インターネット）
+cron-job.org（10分ごと）──API──→ GitHub Actions ── render.py ──→ GitHub Pages ←── Kindle
 ```
+
+GitHub 自身の定期実行（schedule）は、数十分〜数時間遅れたり飛ばされたりすることがあるので、1時間ごとの保険としてだけ使っています。
 
 1. このリポジトリを GitHub で **Public** にします。無料で使うための条件です。`server/config.json` の地点と Kindle のIPも公開されるので、気になる値は書き換えておいてください。
 2. GitHub のリポジトリで **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にします。
@@ -164,8 +166,42 @@ GitHub Actions（10分ごと）── render.py ──→ GitHub Pages ←──
    USBで編集する場合は、`config.sh` のコメントにしてある行を有効にしてください。
 5. KUAL の **Status** で `Server: OK` と出れば完了です。PCの `serve.py` は止めて構いません。
 
+#### 10分ごとに外部から呼び出す（cron-job.org）
+
+1. **GitHub のトークンを作ります。** GitHub 右上のアイコン → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token** を開きます。
+   | 項目 | 設定 |
+   |---|---|
+   | Token name | `kindle-dashboard-cron` など |
+   | Expiration | 1年など（期限が来たら作り直して、cron-job.org の設定を差し替え） |
+   | Repository access | **Only select repositories** → `kindle_dashboard` だけ |
+   | Permissions | **Actions: Read and write** だけ（他はすべて No access のまま） |
+
+   作成後に表示される `github_pat_...` をコピーします（一度しか表示されません）。
+2. **PCから試しに呼び出します。** `<トークン>` を置き換えて PowerShell で実行します。何も表示されずに終われば成功で、Actions 画面に `workflow_dispatch` の実行が1件増えます。
+   ```powershell
+   curl.exe -sf -X POST -H "Authorization: Bearer <トークン>" -H "Accept: application/vnd.github+json" `
+     https://api.github.com/repos/J105588/kindle_dashboard/actions/workflows/dashboard.yml/dispatches -d '{\"ref\":\"main\"}'
+   ```
+3. **[cron-job.org](https://cron-job.org) に登録します**（無料・要アカウント）。**CREATE CRONJOB** で次のように設定します。
+   | 項目 | 設定 |
+   |---|---|
+   | URL | `https://api.github.com/repos/J105588/kindle_dashboard/actions/workflows/dashboard.yml/dispatches` |
+   | Execution schedule | **Custom** → Minutes に `5,15,25,35,45,55`、ほかは Every（毎時ちょうど前後は天気サービスが混むため避ける） |
+   | Time zone | Asia/Tokyo |
+   | ADVANCED → Request method | **POST** |
+   | ADVANCED → Headers | `Authorization` = `Bearer <トークン>`<br>`Accept` = `application/vnd.github+json`<br>`X-GitHub-Api-Version` = `2022-11-28`<br>`Content-Type` = `application/json` |
+   | ADVANCED → Request body | `{"ref":"main"}` |
+   | Notifications | 「実行に失敗したとき」にメール通知を ON にしておくと、トークン切れにすぐ気づけます |
+
+   保存後に **TEST RUN** で `204` が返れば完了です。
+
+- トークンでできるのは、このリポジトリの Actions の操作だけです。漏れた場合も GitHub の Settings からすぐ削除（Revoke）できます。
+- 外部の呼び出しが止まっても、1時間ごとの保険の実行で更新は続きます。
+
+#### 補足
+
 - 地点などを変えるときは `server/config.json` を編集して push します。次の実行から反映されます。
-- GitHub の定期実行は混雑すると数分遅れることがあります。時計は Kindle が毎分進めるので、遅れるのは天気と日付の切り替わりだけです。
+- `dashboard.png` に写っている時刻は描画した時点のものです。Kindle は時計の数字を毎分自分で描き替えるので、実機の時計は正しく進みます。
 - 公開リポジトリは60日間更新が無いと、定期実行が自動で止められます。これを防ぐため、毎週月曜に同じワークフローが自分自身を有効化し直します。もし止まってしまったら、Actions 画面の **Enable workflow** で再開できます。
 - 古いファームウェアの Kindle では HTTPS の証明書を確認できないことがあります。その場合は自動で、確認なしで取り直します。
 - PC 版に戻すときは、`SERVER_URL` を `http://192.168.x.x:8080` に戻すだけです。
@@ -238,7 +274,7 @@ python convert_images.py 写真フォルダ --kindle E:/ --to slides --fit conta
 |---|---|
 | KUALに Signage が出ない | `extensions/signage/config.xml` があるか |
 | 「Cannot reach …」と出る | PCで serve.py が動いているか / `SERVER_URL` / ファイアウォール / Kindleの機内モード |
-| GitHub Pages 版で更新されない | GitHub の Actions 画面で Dashboard が失敗していないか / 止められていないか（Enable workflow） |
+| GitHub Pages 版で更新されない | Actions 画面で Dashboard が失敗していないか / 止められていないか（Enable workflow）/ cron-job.org の履歴が 204 か（401・403 ならトークンの期限切れか権限不足） |
 | 時計が9時間ずれる | `config.sh` の `TZ_OFFSET_MIN` を `0` に |
 | 何も起きない | `.sh` の改行コードが LF か / `signage/signage.log` を確認 |
 | スクリーンセーバーが変わらない | Status で ON か確認（再起動後は OFF に戻ります）/ 画像が `signage/screensaver` にあるか |
