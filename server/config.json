@@ -1,0 +1,16 @@
+{
+  "location_name": "東京",
+  "latitude": 35.6812,
+  "longitude": 139.7671,
+  "timezone": "Asia/Tokyo",
+  "device": "pw3",
+  "port": 8080,
+  "refresh_minutes": 10,
+  "kindle": {
+    "host": "192.168.1.177",
+    "user": "root",
+    "port": 22,
+    "identity": "~/.ssh/kindle"
+  },
+  "upload_pin": ""
+}

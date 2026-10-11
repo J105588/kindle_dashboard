@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "name": "Signage",
+      "priority": 0,
+      "items": [
+        { "name": "Signage: Start",          "priority": 1, "action": "/mnt/us/extensions/signage/bin/start.sh",   "exitmenu": true },
+        { "name": "Signage: Stop",           "priority": 2, "action": "/mnt/us/extensions/signage/bin/stop.sh",    "exitmenu": true },
+        { "name": "Screensaver: ON",         "priority": 3, "action": "/mnt/us/extensions/signage/bin/ss_on.sh",   "exitmenu": false },
+        { "name": "Screensaver: OFF",        "priority": 4, "action": "/mnt/us/extensions/signage/bin/ss_off.sh",  "exitmenu": false },
+        { "name": "Screensaver: Preview",    "priority": 5, "action": "/mnt/us/extensions/signage/bin/ss_test.sh", "exitmenu": true },
+        { "name": "Status",                  "priority": 6, "action": "/mnt/us/extensions/signage/bin/status.sh",  "exitmenu": false }
+      ]
+    }
+  ]
+}
