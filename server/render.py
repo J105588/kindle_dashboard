@@ -3,7 +3,8 @@
 Kindle ダッシュボード描画エンジン
 
 出力（out/ フォルダ）:
-  dashboard.png      … 背景（日付・天気・カレンダー）。時計の部分は空白
+  dashboard.png      … 背景（日付・天気・カレンダー）。時計の数字の部分は空白
+  preview.png        … 描画時刻を入れた確認用の画像
   clock/0.png〜9.png … 時計の数字スプライト（Kindleが毎分差し替える）
   clock/colon.png    … 時計のコロン
   layout.txt         … 時計を描く位置 "X Y 数字幅 コロン幅 高さ 版"
@@ -639,12 +640,14 @@ def render(cfg, out_dir, demo=False, now=None):
     if weather:
         draw_weekly(c, weather, tz, 560, y_bot + 54, 440)
 
+    # Kindle は背景を全面描画してから数字を重ねるので、背景に描画時刻を入れると取得の瞬間だけ古い時刻が見える。
+    # 時刻入りは確認用の preview.png にだけ描く。コロンは Kindle が描かないので背景に入れる
     img = c.finish()
-    paste_time(img, sprites, layout, f"{now:%H:%M}")
-    return img, sprites, layout
+    img.paste(sprites[":"], (layout["x"] + layout["dw"] * 2, layout["y"]))
+    return img, sprites, layout, f"{now:%H:%M}"
 
 
-def save(out_dir, img, sprites, layout):
+def save(out_dir, img, sprites, layout, hhmm):
     os.makedirs(os.path.join(out_dir, "clock"), exist_ok=True)
     names = {ch: ("colon" if ch == ":" else ch) for ch in sprites}
     h = hashlib.sha1()
@@ -657,9 +660,12 @@ def save(out_dir, img, sprites, layout):
     with open(os.path.join(out_dir, "layout.txt.tmp"), "w") as f:
         f.write(f"{layout['x']} {layout['y']} {layout['dw']} {layout['cw']} {layout['h']} {ver}\n")
     os.replace(os.path.join(out_dir, "layout.txt.tmp"), os.path.join(out_dir, "layout.txt"))
-    p = os.path.join(out_dir, "dashboard.png")
-    img.save(p + ".tmp", "PNG", optimize=True)
-    os.replace(p + ".tmp", p)
+    preview = img.copy()
+    paste_time(preview, sprites, layout, hhmm)
+    for name, im in (("dashboard.png", img), ("preview.png", preview)):
+        p = os.path.join(out_dir, name)
+        im.save(p + ".tmp", "PNG", optimize=True)
+        os.replace(p + ".tmp", p)
 
 
 def load_config():

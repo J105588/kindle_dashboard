@@ -112,14 +112,14 @@ server/                       ← PC側
    ```
    python render.py --demo
    ```
-   `out/dashboard.png` が作られます（ダミーの天気で描画）。
+   `out/preview.png` が作られます（ダミーの天気で描画）。Kindle に送る `out/dashboard.png` は時計の数字が空白の背景です。
 5. サーバーを起動します。
    ```
    python serve.py
    ```
    `配信中: http://192.168.x.x:8080` と表示されたら、そのURLを控えておきます。
    - Windowsで「ファイアウォールの許可」が出たら、**プライベートネットワーク**を許可してください。
-   - ブラウザで `http://192.168.x.x:8080/dashboard.png` が開ければOKです。
+   - ブラウザで `http://192.168.x.x:8080/preview.png` が開ければOKです。
    - 常時表示するならPCは起動したままにする必要があります。消費電力の小さい **Raspberry Pi** で動かすのがおすすめです（同じ手順で動きます）。
    - 動作を確認できたら、`Ctrl+C` で止めて **裏で動かす** 方法に切り替えると、PowerShell を開いたままにしなくて済みます。
 
@@ -158,7 +158,7 @@ GitHub 自身の定期実行（schedule）は、数十分〜数時間遅れた�
 
 1. このリポジトリを GitHub で **Public** にします。無料で使うための条件です。`server/config.json` の地点と Kindle のIPも公開されるので、気になる値は書き換えておいてください。
 2. GitHub のリポジトリで **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にします。
-3. `git push` したら、**Actions → Dashboard → Run workflow** で1回手動実行します。成功すれば、`https://<ユーザー名>.github.io/kindle_dashboard/dashboard.png` で画像が見られます。
+3. `git push` したら、**Actions → Dashboard → Run workflow** で1回手動実行します。成功すれば、`https://<ユーザー名>.github.io/kindle_dashboard/preview.png` で画像が見られます。
 4. Kindle の `SERVER_URL` をそのURLに変えます。
    ```
    python kindlectl.py set SERVER_URL https://<ユーザー名>.github.io/kindle_dashboard
@@ -202,7 +202,7 @@ GitHub 自身の定期実行（schedule）は、数十分〜数時間遅れた�
 
 - 地点などを変えるときは `server/config.json` を編集して push します。次の実行から反映されます。
 - Kindle は時計の 09・19・29…59分に背景を取りに行きます（`config.sh` の `DASH_REFRESH_OFFSET=9`）。05・15…分の呼び出しで GitHub が公開し終えた直後に取るためです。
-- `dashboard.png` に写っている時刻は描画した時点のものです。Kindle は時計の数字を毎分自分で描き替えるので、実機の時計は正しく進みます。
+- `preview.png` に写っている時刻は描画した時点のものです。Kindle が取る `dashboard.png` には時計の数字を入れず、Kindle が今の時刻を自分で描くので、取得した瞬間に古い時刻が見えることはありません。
 - 公開リポジトリは60日間更新が無いと、定期実行が自動で止められます。これを防ぐため、毎週月曜に同じワークフローが自分自身を有効化し直します。もし止まってしまったら、Actions 画面の **Enable workflow** で再開できます。
 - 古いファームウェアの Kindle では HTTPS の証明書を確認できないことがあります。その場合は自動で、確認なしで取り直します。
 - PC 版に戻すときは、`SERVER_URL` を `http://192.168.x.x:8080` に戻すだけです。

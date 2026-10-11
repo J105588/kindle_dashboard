@@ -70,7 +70,7 @@ jobs:
       - name: Build site
         run: |
           mkdir -p ../_site/clock
-          cp out/dashboard.png out/layout.txt ../_site/
+          cp out/dashboard.png out/preview.png out/layout.txt ../_site/
           cp out/clock/*.png ../_site/clock/
           touch ../_site/.nojekyll
 
