@@ -50,8 +50,10 @@ if [ "$FREEZE_UI" = "1" ] && [ "$grabbed" = "1" ]; then
   killall -STOP cvm 2>/dev/null && { echo 1 > "$FROZEN_FLAG"; log "UI paused"; }
 fi
 
-# cvm を止めても上部ステータスバー（電池・時刻）は pillow が別に描き直すので隠す
+# cvm を止めても上部ステータスバー（電池・時刻）は別プロセスが時刻・残量の変化のたびに描き直す。
+# 旧ファームは pillow、5.16 以降は JunoStatusBarDriver が描くので両方止める（stop.sh で再開）
 lipc-set-prop com.lab126.pillow disableEnablePillow disable 2>/dev/null
+killall -STOP JunoStatusBarDriver 2>/dev/null && log "status bar paused"
 
 # ---- 画像スライドショー ----
 if [ "$SIGNAGE_SOURCE" = "slides" ]; then

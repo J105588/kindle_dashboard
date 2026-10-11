@@ -5,6 +5,7 @@
 # 1. Kindle本来の画面を再開し、自動スリープを元に戻す（最優先）
 killall -CONT cvm 2>/dev/null
 rm -f "$FROZEN_FLAG"
+killall -CONT JunoStatusBarDriver 2>/dev/null
 lipc-set-prop com.lab126.pillow disableEnablePillow enable 2>/dev/null
 lipc-set-prop com.lab126.powerd preventScreenSaver 0 2>/dev/null
 

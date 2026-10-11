@@ -121,6 +121,16 @@ server/                       ← PC側
    - Windowsで「ファイアウォールの許可」が出たら、**プライベートネットワーク**を許可してください。
    - ブラウザで `http://192.168.x.x:8080/dashboard.png` が開ければOKです。
    - 常時表示するならPCは起動したままにする必要があります。消費電力の小さい **Raspberry Pi** で動かすのがおすすめです（同じ手順で動きます）。
+   - 動作を確認できたら、`Ctrl+C` で止めて **裏で動かす** 方法に切り替えると、PowerShell を開いたままにしなくて済みます。
+
+     | コマンド | 内容 |
+     |---|---|
+     | `python serve.py start` | 裏で起動（PowerShell を閉じても動き続ける） |
+     | `python serve.py stop` | 止める |
+     | `python serve.py restart` | 再起動（`config.json` を変えたとき） |
+     | `python serve.py status` | 動いているか・URL を表示 |
+     | `python serve.py log` | ログ（`out/serve.log`）の最後を表示 |
+     | `python serve.py autostart on` | Windows にサインインしたら自動で裏起動（`off` で解除） |
 
 ### 3-2. Kindle側
 
@@ -277,7 +287,7 @@ Get-Content $HOME\.ssh\kindle.pub
 
 ### 7-5. スマホから送る
 
-1. PC で `python serve.py` を起動します。
+1. PC で `python serve.py`（または `python serve.py start`）を起動します。
 2. スマホのブラウザで、表示される **`http://192.168.x.x:8080/upload`** を開きます。
    - ホーム画面に追加しておくと、アプリのように使えます。
 3. 写真を選び、送り先（スクリーンセーバー／スライドショー）を選んで「Kindle に送る」を押します。

@@ -80,7 +80,10 @@ KINDLE_PATH = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/mnt/us/
 
 def remote(k, script, data=None, check=True):
     """Kindle 上で sh スクリプトを実行。data を渡すと標準入力に流す"""
-    p = subprocess.run(ssh_base(k) + [KINDLE_PATH + script], input=data, capture_output=True)
+    # serve.py をウィンドウ無しで動かしているとき、ssh のたびに黒い窓が出ないようにする
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    p = subprocess.run(ssh_base(k) + [KINDLE_PATH + script], input=data, capture_output=True,
+                       creationflags=flags)
     out = p.stdout.decode("utf-8", "replace")
     err = "\n".join(l for l in p.stderr.decode("utf-8", "replace").splitlines()
                     if l.strip() and "Welcome to Kindle" not in l)
