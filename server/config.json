@@ -7,7 +7,7 @@
   "port": 8080,
   "refresh_minutes": 10,
   "kindle": {
-    "host": "192.168.1.177",
+    "host": "192.168.0.177",
     "user": "root",
     "port": 22,
     "identity": "~/.ssh/kindle"
