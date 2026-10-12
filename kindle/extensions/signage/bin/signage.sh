@@ -61,7 +61,7 @@ if [ "$SIGNAGE_SOURCE" = "slides" ]; then
     f=$(next_image "$DATA/slides" "$CACHE/slide_index" sequential)
     if [ -n "$f" ]; then
       eips -f -g "$f" >/dev/null 2>&1
-      batt_low && draw_batt_icon
+      draw_batt_icon "$(batt_state)"
     else
       eips -c; msg "No PNG images in /mnt/us/signage/slides" 10
     fi
@@ -71,7 +71,7 @@ fi
 
 # ---- ダッシュボード ----
 [ "$WIFI_AUTO_ON" = "1" ] && wifi_wait 30
-last=-1; fail=0; prev=""; batt_on=0
+last=-1; fail=0; prev=""; batt_shown=""
 while :; do
   slot=$(refresh_slot)
   if [ "$slot" != "$last" ]; then
@@ -83,7 +83,7 @@ while :; do
       # 失敗したら1分後にもう一度（何度も失敗したら次の取得時刻まで待つ）
       [ "$fail" -lt 5 ] || last=$slot
     fi
-    batt_on=0
+    batt_shown=""
     if draw_dashboard; then
       prev=$(now_hhmm)
       [ "$fail" -ge 3 ] && msg "offline - showing last data" 1
@@ -94,12 +94,14 @@ while :; do
   elif [ -n "$prev" ]; then
     prev=$(draw_clock "$prev")
   fi
-  if batt_low; then
-    [ "$batt_on" = "1" ] || { draw_batt_icon; batt_on=1; }
-  elif [ "$batt_on" = "1" ]; then
-    # 充電などで回復したらマークを消すために描き直す
-    batt_on=0
-    draw_dashboard && prev=$(now_hhmm)
+  batt=$(batt_state)
+  if [ "$batt" != "$batt_shown" ]; then
+    # 前のマークを消すには背景ごと描き直すしかない
+    if [ -n "$batt_shown" ] && draw_dashboard; then
+      prev=$(now_hhmm)
+    fi
+    draw_batt_icon "$batt"
+    batt_shown=$batt
   fi
   s=$(date +%s)
   sleep $((60 - s % 60)) & wait $!   # 次の「00秒」まで待つ（止められたらすぐ抜ける）

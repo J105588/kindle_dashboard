@@ -33,7 +33,9 @@ TAP_EXIT=3
 FREEZE_UI=1
 
 # 電池残量がこの値(%)以下になったら右上に電池マークを出す（充電中は出さない。0=出さない）
-BATT_LOW_PCT=5
+BATT_LOW_PCT=15
+# 充電中は右上に充電マークを出す（1=出す / 0=出さない）
+BATT_CHG_ICON=1
 
 # Signage: Start 時に Wi-Fi を自動でONにする（1=する / 0=しない）
 WIFI_AUTO_ON=1

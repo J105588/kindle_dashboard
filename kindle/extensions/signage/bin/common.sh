@@ -18,7 +18,8 @@ SS_BIND=/var/tmp/signage_ssbind         # native 方式で標準画像の代わ�
 . "$EXT/config.sh"
 # 古い config.sh に無い項目の既定値
 : "${SS_DELAY:=1}" "${SS_REDRAW:=3}" "${FREEZE_UI:=1}" "${SS_REFRESH_MIN:=0}"
-: "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=5}"
+: "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=15}"
+: "${BATT_CHG_ICON:=1}"
 : "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}" "${DASH_REFRESH_OFFSET:=9}"
 TIME_SYNC_STAMP=/var/tmp/signage_timesync
 mkdir -p "$CACHE/clock" "$DATA/slides" "$DATA/screensaver"
@@ -146,19 +147,22 @@ batt_level() {
   echo "${_b:-100}"
 }
 
-# 充電中は出さない
-batt_low() {
-  [ "$BATT_LOW_PCT" -gt 0 ] 2>/dev/null || return 1
-  [ "$(lipc-get-prop com.lab126.powerd isCharging 2>/dev/null)" = "1" ] && return 1
-  [ "$(batt_level)" -le "$BATT_LOW_PCT" ] 2>/dev/null
+# 出すマークの種類（charging / low / 空）。充電中は残量が少なくても charging を優先
+batt_state() {
+  if [ "$(lipc-get-prop com.lab126.powerd isCharging 2>/dev/null)" = "1" ]; then
+    [ "$BATT_CHG_ICON" = "1" ] && echo charging
+    return 0
+  fi
+  [ "$BATT_LOW_PCT" -gt 0 ] 2>/dev/null && [ "$(batt_level)" -le "$BATT_LOW_PCT" ] 2>/dev/null && echo low
+  return 0
 }
 
-# 右上に電池残量低下マーク（x は 8 の倍数にそろえる）
+# 右上に電池マーク。引数は batt_state の値（x は 8 の倍数にそろえる）
 draw_batt_icon() {
-  [ -f "$EXT/img/batt_low.png" ] || return 1
+  [ -n "$1" ] && [ -f "$EXT/img/batt_$1.png" ] || return 1
   _w=$(eips -i 2>/dev/null | awk '$1=="xres:"{print $2; exit}')
   _x=$(( (${_w:-1072} - 136) / 8 * 8 ))
-  eips -g "$EXT/img/batt_low.png" -x "$_x" -y 24 >/dev/null 2>&1
+  eips -g "$EXT/img/batt_$1.png" -x "$_x" -y 24 >/dev/null 2>&1
 }
 
 # ---- スクリーンセーバー native 方式 ----
