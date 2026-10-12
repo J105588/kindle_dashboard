@@ -449,6 +449,24 @@ python kindlectl.py gdrive-setup
 4. Kindle に拡張（`extensions/gdrive`）、KOReader のプラグイン、rclone（約60MB）、ログイン情報を送ります。
 5. 初回の同期をします。
 
+**自分の OAuth クライアント ID を使う（推奨）:** rclone の既定のクライアント ID は世界中の利用者で共有しているため、`Quota exceeded` / `rateLimitExceeded`（403）で失敗することがあります。その場合は Google Cloud で自分のクライアント ID（無料）を作ってログインし直します。
+
+1. https://console.cloud.google.com/ で新しいプロジェクトを作ります（名前は任意。例 `kindle-gdrive`）。
+2. **API とサービス → ライブラリ** で「Google Drive API」を検索し、**有効にします**。
+3. **API とサービス → OAuth 同意画面（Google Auth Platform）** を開き、次のとおり設定します。
+    - User Type: **外部**。アプリ名・サポートメール・連絡先は自分のものでかまいません。
+    - **データアクセス（スコープ）** に `.../auth/drive.readonly` を追加します。
+    - **対象（テストユーザー）** に Kindle で使う Google アカウントを追加します。
+    - **公開ステータスを「本番環境」にします**（「テスト」のままだとログインが7日で切れます。確認審査は不要で、ログイン時に「Google はこのアプリを確認していません」と出たら **詳細 → 移動** で進みます）。
+4. **API とサービス → 認証情報 → 認証情報を作成 → OAuth クライアント ID**、アプリケーションの種類は **デスクトップ アプリ** で作成し、クライアント ID とシークレットを控えます。
+5. PC で次を実行します（ブラウザでログインし直し、Kindle にログイン情報を送り直します）。
+
+```powershell
+python kindlectl.py gdrive-setup --client-id 123456-xxxx.apps.googleusercontent.com --client-secret GOCSPX-xxxx
+```
+
+一度指定すれば、以後の `gdrive-setup --reauth` でも同じクライアント ID を使います（`server/gdrive/rclone.conf` に保存されます）。
+
 ### 9-3. 使い方
 
 | 場所 | 操作 |
@@ -480,6 +498,7 @@ python kindlectl.py gdrive-setup
 | `cannot read Drive: directory not found` | Drive に「Kindle」フォルダがあるか（`--folder` の名前） |
 | `stopped: N files would be deleted` | Drive 側で意図して消したなら `gdrive-set MAX_DELETE 100` で上限を上げて再同期 |
 | ログインの期限切れ（`invalid_grant` など） | `python kindlectl.py gdrive-setup --reauth` |
+| `Quota exceeded` / `rateLimitExceeded`（403） | rclone 共有のクライアント ID の上限。9-2 の手順で自分のクライアント ID を作り `gdrive-setup --client-id ... --client-secret ...` |
 | rclone が起動しない（`gdrive-log` に `exec format` / `kernel too old` など） | Kindle のカーネルが古いため。`server/gdrive.py` の `RCLONE_VERSION` は Go 1.23 でビルドされた v1.69.0 に固定しています（v1.69.1 以降は Linux 3.2 以上が必要） |
 | 証明書のエラー（`x509` など） | 時計がずれていないか（サイネージの NTP 同期）/ `gdrive-setup` で証明書を送り直す |
 

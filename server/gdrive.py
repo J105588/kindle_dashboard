@@ -2,6 +2,8 @@
 Google Drive 同期（rclone）の PC 側の処理。kindlectl.py の gdrive-* コマンドから使う。
 
   python kindlectl.py gdrive-setup            … rclone の取得 → Google ログイン → Kindle に転送 → 初回同期
+  python kindlectl.py gdrive-setup --client-id ID --client-secret SECRET
+                                              … 自分の Google Cloud の OAuth クライアントでログインし直す
   python kindlectl.py gdrive-sync             … 今すぐ同期して結果を表示
   python kindlectl.py gdrive-status           … 前回の結果・ファイル数
   python kindlectl.py gdrive-ls               … Kindle 上の同期フォルダの一覧
@@ -15,6 +17,7 @@ rclone 本体と Google のログイン情報（rclone.conf）は server/gdrive/
   python kindlectl.py gdrive-wake on|off      … 復帰時の同期の切り替え
 """
 import io
+import json
 import os
 import platform
 import shlex
@@ -121,21 +124,48 @@ def authorized(rclone):
     return f"{REMOTE_NAME}:" in p.stdout.split()
 
 
-def authorize(rclone, reauth=False):
+def remote_conf(rclone):
+    if not os.path.exists(CONF):
+        return {}
+    p = _rc(rclone, "config", "dump")
+    try:
+        return json.loads(p.stdout or "{}").get(REMOTE_NAME, {})
+    except ValueError:
+        return {}
+
+
+def authorize(rclone, reauth=False, client_id=None, client_secret=None):
     """ブラウザで Google にログインして、読み取り専用の権限を rclone.conf に保存する"""
+    cur = remote_conf(rclone)
+    if client_id and client_id != cur.get("client_id"):
+        reauth = True   # トークンはクライアント ID ごとに発行されるので、変えたらログインし直す
     if authorized(rclone) and not reauth:
         print("  Google へのログインは済んでいます（やり直すときは --reauth）")
+        warn_shared_client(cur)
         return
-    if reauth and authorized(rclone):
+    if not client_id and cur.get("client_id"):
+        client_id, client_secret = cur["client_id"], cur.get("client_secret", "")
+    if authorized(rclone):
         _rc(rclone, "config", "delete", REMOTE_NAME)
     print()
     print("  ブラウザが開きます。Kindle で使う Google アカウントでログインし、「許可」を押してください。")
     print("  （権限は読み取り専用です。Kindle から Drive のファイルを消したり変えたりはできません）")
     print()
-    p = _rc(rclone, "config", "create", REMOTE_NAME, "drive", "scope=drive.readonly", capture=False)
+    args = ["config", "create", REMOTE_NAME, "drive", "scope=drive.readonly"]
+    if client_id:
+        args += [f"client_id={client_id}", f"client_secret={client_secret or ''}"]
+    p = _rc(rclone, *args, capture=False)
     if p.returncode != 0 or not authorized(rclone):
         raise SetupError("Google へのログインが完了しませんでした。もう一度 gdrive-setup を実行してください")
     print("  ログインできました")
+    warn_shared_client(remote_conf(rclone))
+
+
+def warn_shared_client(conf):
+    # rclone 内蔵のクライアント ID は世界中の rclone 利用者と共有で、Drive API の上限（rateLimitExceeded）に頻繁に当たる
+    if not conf.get("client_id"):
+        print("  ※ rclone 共有のクライアント ID を使っています。「Quota exceeded」「rateLimitExceeded」で失敗するときは、")
+        print("     自分の OAuth クライアントを作って gdrive-setup --client-id ID --client-secret SECRET を実行してください")
 
 
 def check_folder(rclone, folder):
@@ -277,6 +307,8 @@ def add_commands(sub):
     p = sub.add_parser("gdrive-setup", help="Google Drive 同期の準備（rclone・ログイン・転送・初回同期）")
     p.add_argument("--folder", default="Kindle", help="同期する Google Drive のフォルダ（既定: Kindle）")
     p.add_argument("--reauth", action="store_true", help="Google へのログインをやり直す")
+    p.add_argument("--client-id", help="自分の Google Cloud の OAuth クライアント ID（共有 ID の上限エラーを避ける）")
+    p.add_argument("--client-secret", help="上のクライアント ID のシークレット")
     p.add_argument("--with-config", action="store_true", help="Kindle の gdrive/config.sh も上書きする")
     p.add_argument("--no-sync", action="store_true", help="転送だけして同期しない")
     sub.add_parser("gdrive-sync", help="今すぐ同期")
@@ -299,12 +331,14 @@ def run(kc, k, a):
         return False
     try:
         if a.cmd == "gdrive-setup":
+            if bool(a.client_id) != bool(a.client_secret):
+                raise SetupError("--client-id と --client-secret は両方指定してください")
             print("1/5 rclone を用意します")
             rclone = pc_rclone()
             kindle_rclone()
             ca_bundle()
             print("2/5 Google にログインします")
-            authorize(rclone, a.reauth)
+            authorize(rclone, a.reauth, a.client_id, a.client_secret)
             print(f"3/5 Google Drive の「{a.folder}」フォルダを確認します")
             n = check_folder(rclone, a.folder)
             print(f"  PDF {n} 件")

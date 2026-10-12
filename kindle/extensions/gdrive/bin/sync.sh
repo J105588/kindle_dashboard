@@ -29,6 +29,12 @@ fi
 date +%s > "$LAST"
 trap 'drop_lock' EXIT INT TERM HUP
 
+# rclone 共有のクライアント ID が Drive API の上限に当たったときは、対処が分かる短い文にする
+quota_hint() {
+  grep -q "rateLimitExceeded\|Quota exceeded\|userRateLimitExceeded" "$1" 2>/dev/null &&
+    echo "Drive API quota exceeded (gdrive-setup --client-id)"
+}
+
 fail() { # message
   set_state error "$1"
   log "ERROR: $1"
@@ -84,7 +90,8 @@ lsf_rc=$?
 remote_n=$(wc -l < "$LIST")
 if [ "$lsf_rc" -ne 0 ]; then
   wifi_restore
-  err=$(grep -m1 "ERROR\|Failed\|not found" "$RUNLOG" | sed 's/.*: //' | cut -c1-80)
+  err=$(quota_hint "$RUNLOG")
+  [ -n "$err" ] || err=$(grep -m1 "ERROR\|Failed\|not found" "$RUNLOG" | sed 's/.*: //' | cut -c1-80)
   fail "cannot read Drive: ${err:-unknown error}"
 fi
 local_n=$(count_files)
@@ -138,7 +145,8 @@ added=${1:-0}; deleted=${2:-0}; updated=${3:-0}
 cat "$RUNLOG" >> "$LOG"
 
 if [ "$rc" -ne 0 ]; then
-  err=$(grep -m1 "ERROR" "$RUNLOG" | sed 's/^.*ERROR : //' | cut -c1-80)
+  err=$(quota_hint "$RUNLOG")
+  [ -n "$err" ] || err=$(grep -m1 "ERROR\|CRITICAL" "$RUNLOG" | sed 's/^.*\(ERROR \|CRITICAL\): //' | cut -c1-80)
   set_state error "rclone error $rc: ${err:-see gdrive.log}" "$added" "$deleted" "$updated"
   log "sync failed (rc=$rc)"
   [ "$MODE" = "--ui" ] && msg "GDrive: ERROR (rc=$rc) see gdrive.log"
