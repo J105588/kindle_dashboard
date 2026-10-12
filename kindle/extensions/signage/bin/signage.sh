@@ -106,7 +106,6 @@ while :; do
     if fetch_dashboard; then
       fail=0; last=$slot
       time_sync
-      [ "$TIMER_ENABLE" = "1" ] && fetch_timer
     else
       fail=$((fail + 1))
       # 失敗したら1分後にもう一度（何度も失敗したら次の取得時刻まで待つ）

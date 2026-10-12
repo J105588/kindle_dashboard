@@ -647,94 +647,6 @@ def render(cfg, out_dir, demo=False, now=None):
     return img, sprites, layout, f"{now:%H:%M}"
 
 
-# ---------------------------------------------------------------- タイマー画面
-# Kindle 側（timer.sh）はこの画像を並べるだけでタイマーを描き、layout.txt の枠でタップを判定する
-TIMER_ADD = [("+10秒", 10), ("+30秒", 30), ("+1分", 60), ("+3分", 180), ("+5分", 300), ("+10分", 600)]
-TIMER_TOP, TIMER_SIZE = 230, 300
-
-
-def _button(c, x1, y1, x2, y2, label, size, primary=False):
-    fill, fg = (BLACK, WHITE) if primary else (WHITE, BLACK)
-    c.d.rounded_rectangle([c.X(x1), c.Y(y1), c.X(x2), c.Y(y2)], radius=c.P(24), fill=fill,
-                          outline=BLACK, width=int(c.P(4)))
-    c.text((x1 + x2) / 2, (y1 + y2) / 2, label, "bold", size, fg, anchor="mm")
-
-
-def _px_box(c, x1, y1, x2, y2):
-    """基準座標の枠 → 実ピクセル。eips で差し替える部分は x と幅を 8 の倍数にそろえる"""
-    return (floor8(c.ox + x1 * c.s), int(c.oy + y1 * c.s),
-            min(c.w, ceil8(c.ox + x2 * c.s)), int(math.ceil(c.oy + y2 * c.s)))
-
-
-def render_timer(cfg):
-    W, H = DEVICES.get(cfg.get("device", "pw3"), DEVICES["pw3"])
-    fonts = Fonts()
-
-    def base():
-        c = Canvas(W, H, fonts)
-        c.text(72, 110, "タイマー", "bold", 44, BLACK)
-        c.text(1000, 110, "右へスワイプで時計に戻る", "regular", 24, GRAY, anchor="rs")
-        c.rule(72, 140, 1000, 3)
-        return c
-
-    c = base()
-    sprites, lay, digit_h = build_clock(c, fonts, 0, TIMER_TOP, TIMER_SIZE)
-    total = lay["dw"] * 4 + lay["cw"]
-    lay["x"] = floor8((W - total) / 2)
-
-    y_grid = TIMER_TOP + digit_h + 90
-    bw, bh, gap = (928 - 2 * 28) / 3, 150, 28
-    buttons = []
-    for i, (label, sec) in enumerate(TIMER_ADD):
-        x1 = 72 + (i % 3) * (bw + gap)
-        y1 = y_grid + (i // 3) * (bh + gap)
-        _button(c, x1, y1, x1 + bw, y1 + bh, label, 52)
-        buttons.append((f"add{sec}", (x1, y1, x1 + bw, y1 + bh)))
-    y_ctl = y_grid + 2 * (bh + gap) + 40
-    reset = (72, y_ctl, 72 + bw, y_ctl + 200)
-    start = (72 + bw + gap, y_ctl, 1000, y_ctl + 200)
-    _button(c, *reset, "リセット", 52)
-    buttons += [("reset", reset), ("start", start)]
-    c.text(536, 1400, "時計の画面で3回タップ、または電源ボタンでサイネージ終了", "regular", 22, GRAY, anchor="ms")
-    bg = c.finish()
-    bg.paste(sprites[":"], (lay["x"] + lay["dw"] * 2, lay["y"]))
-
-    sb = _px_box(c, *start)
-    states = {}
-    for name, label in (("start", "スタート"), ("pause", "一時停止"), ("resume", "再開")):
-        cc = Canvas(W, H, fonts)
-        _button(cc, *start, label, 60, primary=True)
-        states[name] = cc.finish().crop(sb)
-    bg.paste(states["start"], sb[:2])
-
-    cd = Canvas(W, H, fonts)
-    cd.d.rectangle([0, 0, W * SS, H * SS], fill=BLACK)
-    cd.text(536, 640, "時間です", "bold", 150, WHITE, anchor="ms")
-    cd.text(536, 780, "画面をタップして止める", "medium", 40, WHITE, anchor="ms")
-    done = cd.finish()
-
-    lines = [f"digits {lay['x']} {lay['y']} {lay['dw']} {lay['cw']} {lay['h']}",
-             f"sprite start {sb[0]} {sb[1]}"]
-    lines += ["btn %s %d %d %d %d" % ((name,) + _px_box(c, *box)) for name, box in buttons]
-    images = {"bg": bg, "done": done, **states, **{f"d{ch}": sp for ch, sp in sprites.items() if ch != ":"}}
-    return images, lines
-
-
-def save_timer(out_dir, cfg):
-    images, lines = render_timer(cfg)
-    d = os.path.join(out_dir, "timer")
-    os.makedirs(d, exist_ok=True)
-    h = hashlib.sha1("\n".join(lines).encode())
-    for name, im in sorted(images.items()):
-        p = os.path.join(d, name + ".png")
-        im.save(p + ".tmp", "PNG", optimize=True)
-        os.replace(p + ".tmp", p)
-        h.update(im.tobytes())
-    with open(os.path.join(d, "layout.txt.tmp"), "w") as f:
-        f.write("\n".join(lines) + f"\nver {h.hexdigest()[:8]}\n")
-    os.replace(os.path.join(d, "layout.txt.tmp"), os.path.join(d, "layout.txt"))
-
-
 def save(out_dir, img, sprites, layout, hhmm):
     os.makedirs(os.path.join(out_dir, "clock"), exist_ok=True)
     names = {ch: ("colon" if ch == ":" else ch) for ch in sprites}
@@ -783,7 +695,6 @@ def main():
             if err:
                 print(f"[warn] 天気: {err}", file=sys.stderr)
     save(a.out, *render(cfg, a.out, a.demo))
-    save_timer(a.out, cfg)
     print(f"描画しました → {a.out}")
 
 

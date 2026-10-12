@@ -23,7 +23,7 @@ TIMER_SHOWN=/var/tmp/signage_timer_shown   # タイマー画面を出してい�
 # 古い config.sh に無い項目の既定値
 : "${SS_DELAY:=1}" "${SS_REDRAW:=3}" "${FREEZE_UI:=1}" "${SS_REFRESH_MIN:=0}"
 : "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=15}"
-: "${BATT_CHG_ICON:=1}" "${TIMER_ENABLE:=1}" "${TIMER_FLASH:=3}" "${TOUCH_DEBUG:=0}"
+: "${BATT_CHG_ICON:=1}" "${TIMER_ENABLE:=1}" "${TIMER_FLASH:=3}" "${TIMER_ECO_SEC:=15}" "${TOUCH_DEBUG:=0}"
 : "${TOUCH_SWAP_XY:=0}" "${TOUCH_FLIP_X:=0}" "${TOUCH_FLIP_Y:=0}"
 : "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}" "${DASH_REFRESH_OFFSET:=9}"
 TIME_SYNC_STAMP=/var/tmp/signage_timesync
@@ -89,19 +89,6 @@ fetch_dashboard() {
   mv "$CACHE/layout.new" "$CACHE/layout.txt"
   download "$SERVER_URL/dashboard.png" "$CACHE/dashboard.png" || { log "dashboard download failed"; return 1; }
   return 0
-}
-
-# タイマー画面の画像（版が変わったときだけ取り直す。古いサーバーには無いので失敗しても気にしない）
-fetch_timer() {
-  download "$SERVER_URL/timer/layout.txt" "$CACHE/timer.new" || return 1
-  if [ "$(cat "$CACHE/timer.new")" != "$(cat "$CACHE/timer/layout.txt" 2>/dev/null)" ]; then
-    mkdir -p "$CACHE/timer"
-    for n in bg done start pause resume d0 d1 d2 d3 d4 d5 d6 d7 d8 d9; do
-      download "$SERVER_URL/timer/$n.png" "$CACHE/timer/$n.png" || { log "timer image $n failed"; rm -f "$CACHE/timer.new"; return 1; }
-    done
-    log "timer images updated ($(awk '$1=="ver"{print $2}' "$CACHE/timer.new"))"
-  fi
-  mv "$CACHE/timer.new" "$CACHE/timer/layout.txt"
 }
 
 # Kindle の時計は数秒ずれていくことがあるので、TIME_SYNC_MIN ごとに NTP で合わせる

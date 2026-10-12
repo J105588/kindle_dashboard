@@ -69,10 +69,9 @@ jobs:
 
       - name: Build site
         run: |
-          mkdir -p ../_site/clock ../_site/timer
+          mkdir -p ../_site/clock
           cp out/dashboard.png out/preview.png out/layout.txt ../_site/
           cp out/clock/*.png ../_site/clock/
-          cp out/timer/*.png out/timer/layout.txt ../_site/timer/
           touch ../_site/.nojekyll
 
       - uses: actions/upload-pages-artifact@v3
