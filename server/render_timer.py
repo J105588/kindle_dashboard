@@ -10,7 +10,7 @@ iPhone の時計アプリのタイマーを手本に、設定画面（時間・�
   e0〜9.png, g0〜9.png             … 終了予定時刻の数字（動作中 / 一時停止中は薄く）
   ring_K_t|b|l|r.png               … 残りのリング（K=0〜RING_STEPS）。数字に重ならない上下左右の4つの帯に分ける
   start/start_off/pause/resume.png … 右の丸ボタン
-  done.png                         … 終わったときの画面
+  done.png / done_inv.png          … 終わったときの画面と、点滅用にその白黒を反転したもの
   layout.txt                       … 位置とタップの枠（timer.sh が読む）
 
 使い方:
@@ -22,7 +22,7 @@ import glob
 import math
 import os
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 from render import (BLACK, DEVICES, FAINT, GRAY, HERE, INK, LIGHT, SS, WHITE, Canvas, Fonts, build_clock,
                     ceil8, floor8, load_config, quantize16)
@@ -208,6 +208,8 @@ def render_timer(device):
     cd.text(536, 1000, "停止", "bold", 48, BLACK, anchor="mm")
     cd.text(536, 1190, "画面のどこに触れても止まります", "regular", 32, LIGHT, anchor="ms")
     images["done"] = cd.finish()
+    # 点滅は eips -f 1回で済むよう反転した1枚と交互に出す（部品ごとの部分書き換えより軽く、残像も出にくい）
+    images["done_inv"] = ImageOps.invert(images["done"].convert("L"))
     return images, lines
 
 

@@ -21,6 +21,7 @@ preset=0     # スタートした時の秒数（リングの割合に使う）
 end=0        # run のとき終わる時刻（date +%s）
 eco=0        # 1 = 秒を出さない省電力表示
 flash=0      # 終わったときの点滅の残り回数
+done_at=0    # 終わった時刻（点滅を続ける長さに使う）
 touched=$(date +%s)
 command -v usleep >/dev/null 2>&1 && FAST="usleep 500000" || FAST="sleep 1"
 
@@ -240,25 +241,35 @@ start() {
 }
 
 finish() {
-  state=done; remain=0; eco=0
+  state=done; remain=0; eco=0; done_at=$(date +%s)
   log "timer: done"
   if [ ! -f "$TIMER_SHOWN" ]; then
     touch "$TIMER_SHOWN"; sleep 1
   fi
   eips -f -g "$TD/done.png" >/dev/null 2>&1
-  # 音が出ないので白黒の切り替えを繰り返して知らせる。1回ずつ予約するので、途中のタップでもすぐ止まる
-  flash=$(( TIMER_FLASH * 2 - 2 ))
+  # 音が出ないので白黒の反転を繰り返して知らせる。1回ずつ予約するので、途中のタップでもすぐ止まる
+  flash=$(( TIMER_FLASH * 2 ))
   if [ "$flash" -gt 0 ]; then tick_in 1; else tick_off; fi
 }
 
+# 間隔を1秒より詰めないのは、全面書き換え（約0.5〜1秒）が終わる前に次を重ねないため。
+# 気づかれないまま点滅し続けて電池を使い切らないよう、TIMER_FLASH_MIN 分で打ち切る
 flash_step() {
   flash=$(( flash - 1 ))
   if [ $(( flash % 2 )) = 1 ]; then
-    draw_run
+    if [ -f "$TD/done_inv.png" ]; then eips -f -g "$TD/done_inv.png" >/dev/null 2>&1; else draw_run; fi
   else
     eips -f -g "$TD/done.png" >/dev/null 2>&1
   fi
-  if [ "$flash" -gt 0 ]; then tick_in 1; else tick_off; fi
+  if [ "$flash" -gt 0 ]; then
+    tick_in 1
+  elif [ "$TIMER_FLASH_EVERY" -gt 0 ] &&
+       [ $(( $(date +%s) - done_at + TIMER_FLASH_EVERY )) -lt $(( TIMER_FLASH_MIN * 60 )) ]; then
+    flash=$(( TIMER_FLASH * 2 ))
+    tick_in "$TIMER_FLASH_EVERY"
+  else
+    tick_off
+  fi
 }
 
 to_set() { # 動作をやめて設定画面へ（ホイールはスタートしたときの値のまま）
