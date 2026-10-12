@@ -7,7 +7,7 @@
  *   （= サイネージ終了の合図）
  * ・SIGTERM 等で終わると、カーネルが独占を自動で解除する（プロセスが死んでも必ず解除される）
  * ・-e を付けると、タップとスワイプを画面の座標で1行ずつ標準出力に書く（タイマー画面の操作用）
- *     tap X Y / swipe left|right|up|down X0 Y0 / touch X Y（長押しなどそれ以外）/ exit（TAPS 回タップで終わる直前）
+ *     tap X Y / swipe left|right|up|down X0 Y0 長さ / touch X Y（長押しなどそれ以外）/ exit（TAPS 回タップで終わる直前）
  *   このときの状態メッセージは標準エラーに出す
  *
  * 使い方: touchgrab [-t タップ回数(0で無効)] [-w ミリ秒] [-e] [-W 画面幅 -H 画面高さ]
@@ -201,9 +201,9 @@ int main(int argc, char **argv) {
                                 printf("tap %d %d\n", x0, y0);
                                 tap = 1;
                             } else if (dur < 1500 && adx > scr_w / 8 && adx > ady * 2) {
-                                printf("swipe %s %d %d\n", dx < 0 ? "left" : "right", x0, y0);
+                                printf("swipe %s %d %d %d\n", dx < 0 ? "left" : "right", x0, y0, adx);
                             } else if (dur < 1500 && ady > scr_h / 8 && ady > adx * 2) {
-                                printf("swipe %s %d %d\n", dy < 0 ? "up" : "down", x0, y0);
+                                printf("swipe %s %d %d %d\n", dy < 0 ? "up" : "down", x0, y0, ady);
                             } else {
                                 printf("touch %d %d\n", x0, y0);
                             }
