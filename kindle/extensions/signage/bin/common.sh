@@ -23,7 +23,7 @@ TIMER_SHOWN=/var/tmp/signage_timer_shown   # タイマー画面を出してい�
 # 古い config.sh に無い項目の既定値
 : "${SS_DELAY:=1}" "${SS_REDRAW:=3}" "${FREEZE_UI:=1}" "${SS_REFRESH_MIN:=0}"
 : "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=15}"
-: "${BATT_CHG_ICON:=1}" "${TIMER_ENABLE:=1}" "${TIMER_FLASH:=3}" "${TIMER_FLASH_EVERY:=30}" "${TIMER_FLASH_MIN:=5}" "${TIMER_ECO_SEC:=15}" "${TOUCH_DEBUG:=0}"
+: "${BATT_CHG_ICON:=1}" "${TIMER_ENABLE:=1}" "${TIMER_FLASH:=3}" "${TIMER_FLASH_REST:=5}" "${TIMER_FLASH_MIN:=5}" "${TIMER_ECO_SEC:=15}" "${TOUCH_DEBUG:=0}"
 : "${TOUCH_SWAP_XY:=0}" "${TOUCH_FLIP_X:=0}" "${TOUCH_FLIP_Y:=0}"
 : "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}" "${DASH_REFRESH_OFFSET:=9}"
 TIME_SYNC_STAMP=/var/tmp/signage_timesync
