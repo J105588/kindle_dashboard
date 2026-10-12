@@ -1,2 +1,4 @@
 server/out
 server/__pycache__
+# Google Drive 同期: rclone 本体と Google のログイン情報（トークン）。絶対に公開しない
+server/gdrive/

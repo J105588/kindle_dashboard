@@ -403,3 +403,84 @@ Windows で編集したファイルの改行コードは、送るときに自動
 - 予定表（Googleカレンダー）を表示する場合は、`render.py` の `draw_weekly` と同じ要領で、iCal(.ics) のURLを読み込むブロックを追加します。
 - 地点を変えるだけなら `config.json` だけで済みます。デザインを変える場合は、`render.py` の `draw_*` 関数（座標は 1072×1448 基準）を編集します。
 - `python render.py --demo --device kt2` で、他の機種の見た目を確認できます。
+
+---
+
+## 9. Google Drive の PDF を KOReader で読む（rclone）
+
+どの端末からでも、Google Drive の「Kindle」フォルダに PDF を入れれば、Kindle の `/mnt/us/gdrive` に同期され、KOReader で読めます。
+
+```
+スマホ・PC など ──→ Google Drive「Kindle」フォルダ ──rclone（Kindle 上で実行）──→ /mnt/us/gdrive ──→ KOReader
+```
+
+| Drive での操作 | Kindle で起きること |
+|---|---|
+| PDF を追加 | 次の同期で Kindle に入る（サブフォルダもそのまま） |
+| PDF を上書き | Kindle のファイルも新しくなる。KOReader の読書位置（`.sdr`）はそのまま |
+| PDF を削除 | Kindle からも消える。すぐ消さずに `/mnt/us/gdrive_trash` に14日間残す |
+
+- **一方向の同期**です（Drive が正）。Kindle 側で消しても Drive からは消えません。権限は読み取り専用なので、Kindle から Drive を変えることはできません。
+- **一度にたくさん消えることを防ぐ**: 消えるファイルが `MAX_DELETE`（既定20）を超える同期は、1件も消さずに止まります。Drive のフォルダ名を間違えたときも何も消しません。
+- 同期のタイミング: **電源ボタンを押して画面がついたとき（スリープからの復帰時）に自動**で行い、それ以外は**手動**（KOReader / KUAL のメニュー、PC の `gdrive-sync`）です。
+  - 復帰時の同期は Wi-Fi のつながりを最大45秒待ち、つながらなければ何もしません。前回の同期から3分以内（`MIN_GAP_MIN`）の復帰では同期しません。
+  - KOReader で読んでいるときは、変化があったときだけ結果を表示します。Kindle 標準の画面でも、常駐の待ち受け（`wakesync.sh`）が同期します。
+  - Kindle を再起動すると待ち受けは止まり、次に KOReader を起動したとき（または KUAL の Sync on power button ON）に自動で再開します。
+
+### 9-1. 準備
+
+1. Google Drive の**マイドライブ直下に「Kindle」フォルダ**を作ります（別の名前なら `--folder 名前`）。
+2. Kindle に **KOReader** を入れておきます（KUAL から起動）。Paperwhite 第7世代など、ファームウェアが 5.16.3 より前の機種は `koreader-kindlepw2-*.zip`、5.16.3 以降は `koreader-kindlehf-*.zip` です。
+3. SSH（7章）が使える状態にしておきます。
+4. PC で `pip install -r requirements.txt` をもう一度実行します（`certifi` が追加されています）。
+
+### 9-2. セットアップ（PC で1回だけ）
+
+Kindle の Wi-Fi を ON にして画面をつけたまま、次を実行します。
+
+```powershell
+cd server
+python kindlectl.py gdrive-setup
+```
+
+1. rclone（PC 用と Kindle 用）と証明書をダウンロードします（`server/gdrive/` に保存。Git には入りません）。
+2. **ブラウザが開くので、Google にログインして「許可」**を押します（読み取り専用の権限）。
+3. Drive の「Kindle」フォルダを確認します。
+4. Kindle に拡張（`extensions/gdrive`）、KOReader のプラグイン、rclone（約60MB）、ログイン情報を送ります。
+5. 初回の同期をします。
+
+### 9-3. 使い方
+
+| 場所 | 操作 |
+|---|---|
+| KOReader | **メニュー → ツール → Google Drive 同期**（今すぐ同期 / 前回の結果 / 電源ボタンで復帰したときに同期 / 同期フォルダを開く） |
+| KUAL | **Google Drive → GDrive: Sync now / Sync on power button ON / OFF / Status** |
+| PC | `python kindlectl.py gdrive-sync` / `gdrive-status` / `gdrive-ls` / `gdrive-log` / `gdrive-wake on|off` |
+
+- KOReader のファイルブラウザで `/mnt/us/gdrive` を開き、長押し → **ホームフォルダに設定**しておくと便利です。
+- 復帰時の同期を止めたいときは、KOReader のメニューの「電源ボタンで復帰したときに同期」のチェックを外します（KUAL / `gdrive-wake off` でも同じ）。
+- 設定は Kindle の `extensions/gdrive/config.sh`。PC からは `python kindlectl.py gdrive-set MAX_DELETE 50` のように変えられます。
+
+| 設定 | 既定 | 内容 |
+|---|---|---|
+| `GDRIVE_REMOTE` | `kgdrive:Kindle` | 同期元（rclone のリモート名:Drive のフォルダ） |
+| `LOCAL_DIR` | `/mnt/us/gdrive` | 同期先 |
+| `FILE_TYPES` | `pdf` | 同期する拡張子（例 `"pdf epub cbz"`） |
+| `TRASH_DIR` / `TRASH_DAYS` | `/mnt/us/gdrive_trash` / `14` | 消えたファイルの一時置き場と保存日数（0=すぐ消す） |
+| `MAX_DELETE` | `20` | 一度に消してよい最大数 |
+| `SYNC_ON_WAKE` | `1` | 電源ボタンで復帰したときに同期する（`gdrive-wake on|off` で切り替え） |
+| `MIN_GAP_MIN` | `3` | 前回の同期からこの分数以内の復帰では同期しない |
+| `WIFI_AUTO_ON` | `0` | Wi-Fi が OFF のとき一時的に ON にして同期する |
+
+### 9-4. 困ったとき
+
+| 症状 | 確認すること |
+|---|---|
+| `rclone not installed` / `not authorized` | `python kindlectl.py gdrive-setup` を実行 |
+| `cannot read Drive: directory not found` | Drive に「Kindle」フォルダがあるか（`--folder` の名前） |
+| `stopped: N files would be deleted` | Drive 側で意図して消したなら `gdrive-set MAX_DELETE 100` で上限を上げて再同期 |
+| ログインの期限切れ（`invalid_grant` など） | `python kindlectl.py gdrive-setup --reauth` |
+| rclone が起動しない（`gdrive-log` に `exec format` / `kernel too old` など） | Kindle のカーネルが古いため。`server/gdrive.py` の `RCLONE_VERSION` は Go 1.23 でビルドされた v1.69.0 に固定しています（v1.69.1 以降は Linux 3.2 以上が必要） |
+| 証明書のエラー（`x509` など） | 時計がずれていないか（サイネージの NTP 同期）/ `gdrive-setup` で証明書を送り直す |
+
+**元に戻す:** `python kindlectl.py gdrive-wake off` の後、Kindle の `extensions/gdrive`・`koreader/plugins/gdrivesync.koplugin`・`gdrive`・`gdrive_trash` を削除します。Google 側の許可は [Google アカウントのサードパーティ接続](https://myaccount.google.com/connections) で取り消せます。

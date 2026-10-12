@@ -1,5 +1,7 @@
 Pillow>=10.0
 jpholiday
 tzdata
+# Google Drive 同期で Kindle に送る証明書（kindlectl.py gdrive-setup）
+certifi
 # iPhoneのHEIC写真を変換したい場合だけ:
 # pillow-heif

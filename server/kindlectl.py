@@ -25,6 +25,12 @@ kindlectl — SSH 経由で Kindle を操作するツール（PC から実行）
   python kindlectl.py set SS_METHOD auto     … Kindle の config.sh の設定を変える
   python kindlectl.py get [SS_METHOD]        … 設定を見る
   python kindlectl.py shell                  … Kindle にログイン
+
+Google Drive 同期（詳しくは gdrive.py）
+  python kindlectl.py gdrive-setup           … rclone・Google ログイン・Kindle への転送・初回同期
+  python kindlectl.py gdrive-sync | gdrive-status | gdrive-ls | gdrive-log
+  python kindlectl.py gdrive-wake on|off     … 電源ボタンで復帰したときの同期
+  python kindlectl.py gdrive-set KEY VALUE   … Kindle の gdrive/config.sh を変える
 """
 import argparse
 import datetime as dt
@@ -38,6 +44,8 @@ import subprocess
 import sys
 import tarfile
 import types
+
+import gdrive
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = "/mnt/us"
@@ -195,11 +203,20 @@ def collect_update(with_config):
             files[f"extensions/signage/{rel}"] = (data, mode)
     if not files:
         raise KindleError(f"更新するファイルが見つかりません: {LOCAL_EXT}")
+    # Google Drive 同期の拡張（rclone 本体とログイン情報は含まない。入れていない Kindle には送らない）
+    if os.path.isdir(gdrive.LOCAL_GD):
+        files.update(gdrive.collect_ext(with_config))
     return files
 
 
 def do_update(k, with_config=False, dry=False):
     files = collect_update(with_config)
+    if not dry:
+        has_gd = remote(k, f"[ -f {gdrive.GD}/config.sh ] && echo yes || echo no").strip() == "yes"
+        if not has_gd:   # まだ gdrive-setup していない Kindle には Google Drive の拡張を送らない
+            files = {n: v for n, v in files.items() if not n.startswith("extensions/gdrive/")}
+        elif gdrive.koreader_installed(sys.modules[__name__], k):
+            files.update(gdrive.collect_koplugin())
     print(f"送るファイル {len(files)} 個:")
     for f in sorted(files):
         print("  ", f)
@@ -213,8 +230,10 @@ def do_update(k, with_config=False, dry=False):
         remote(k, sh_script("stop.sh"))
     if st["screensaver"] == "on":
         remote(k, sh_script("ss_off.sh"))
-    # 2. 今のプログラムをバックアップ（rollback 用。config.sh も含む）
-    remote(k, f"mkdir -p {DATA}/.backup && cd {ROOT}/extensions && tar -cf {DATA}/.backup/signage_{ts}.tar signage "
+    gdrive.stop_wake(sys.modules[__name__], k)
+    # 2. 今のプログラムをバックアップ（rollback 用。config.sh も含む。rclone 本体は大きいので含めない）
+    remote(k, f"mkdir -p {DATA}/.backup && cd {ROOT}/extensions && "
+              f"tar -cf {DATA}/.backup/signage_{ts}.tar signage $(ls -d gdrive/*.sh gdrive/*.json gdrive/*.xml gdrive/bin/*.sh 2>/dev/null) "
               f"&& ls -1t {DATA}/.backup/signage_*.tar | sed -n '6,$p' | xargs rm -f")
     # 3. 送る
     upload(k, files)
@@ -224,6 +243,8 @@ def do_update(k, with_config=False, dry=False):
         remote(k, sh_script("ss_on.sh"))
     if st["signage"] == "running":
         remote(k, sh_script("start.sh"))
+    remote(k, f"chmod +x {gdrive.GD}/bin/*.sh 2>/dev/null; true")
+    gdrive.ensure_wake(sys.modules[__name__], k)
     remote(k, f"echo \"$(date '+%Y-%m-%d %H:%M:%S') updated via ssh (backup signage_{ts}.tar)\" >> {DATA}/signage.log")
     print(f"更新しました（バックアップ: signage/.backup/signage_{ts}.tar）")
 
@@ -286,10 +307,13 @@ def main():
     p = sub.add_parser("log")
     p.add_argument("-n", type=int, default=40)
     sub.add_parser("shell")
+    gdrive.add_commands(sub)
     a = ap.parse_args()
 
     try:
         cfg, k = load_cfg()
+        if gdrive.run(sys.modules[__name__], k, a):
+            return
         if a.cmd == "push":
             opts = convert_opts(a.fit, a.bg, a.rotate, a.no_dither)
             imgs = convert(a.paths, opts, a.device or cfg.get("device", "pw3"))
