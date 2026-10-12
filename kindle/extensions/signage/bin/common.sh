@@ -14,12 +14,17 @@ TG_OUT=/var/tmp/signage_touchgrab.out
 FROZEN_FLAG=/var/tmp/signage_frozen
 SYS_SS=/usr/share/blanket/screensaver   # Kindle標準のスリープ画像の場所
 SS_BIND=/var/tmp/signage_ssbind         # native 方式で標準画像の代わりに見せるフォルダ（RAM上）
+TIMER_PID=/var/tmp/signage_timer.pid
+TICK_PID=/var/tmp/signage_tick.pid
+TIMER_FIFO=/var/tmp/signage_input.fifo
+TIMER_SHOWN=/var/tmp/signage_timer_shown   # タイマー画面を出している間だけある（signage.sh は描かない）
 
 . "$EXT/config.sh"
 # 古い config.sh に無い項目の既定値
 : "${SS_DELAY:=1}" "${SS_REDRAW:=3}" "${FREEZE_UI:=1}" "${SS_REFRESH_MIN:=0}"
 : "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=15}"
-: "${BATT_CHG_ICON:=1}"
+: "${BATT_CHG_ICON:=1}" "${TIMER_ENABLE:=1}" "${TIMER_FLASH:=3}" "${TOUCH_DEBUG:=0}"
+: "${TOUCH_SWAP_XY:=0}" "${TOUCH_FLIP_X:=0}" "${TOUCH_FLIP_Y:=0}"
 : "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}" "${DASH_REFRESH_OFFSET:=9}"
 TIME_SYNC_STAMP=/var/tmp/signage_timesync
 mkdir -p "$CACHE/clock" "$DATA/slides" "$DATA/screensaver"
@@ -84,6 +89,19 @@ fetch_dashboard() {
   mv "$CACHE/layout.new" "$CACHE/layout.txt"
   download "$SERVER_URL/dashboard.png" "$CACHE/dashboard.png" || { log "dashboard download failed"; return 1; }
   return 0
+}
+
+# タイマー画面の画像（版が変わったときだけ取り直す。古いサーバーには無いので失敗しても気にしない）
+fetch_timer() {
+  download "$SERVER_URL/timer/layout.txt" "$CACHE/timer.new" || return 1
+  if [ "$(cat "$CACHE/timer.new")" != "$(cat "$CACHE/timer/layout.txt" 2>/dev/null)" ]; then
+    mkdir -p "$CACHE/timer"
+    for n in bg done start pause resume d0 d1 d2 d3 d4 d5 d6 d7 d8 d9; do
+      download "$SERVER_URL/timer/$n.png" "$CACHE/timer/$n.png" || { log "timer image $n failed"; rm -f "$CACHE/timer.new"; return 1; }
+    done
+    log "timer images updated ($(awk '$1=="ver"{print $2}' "$CACHE/timer.new"))"
+  fi
+  mv "$CACHE/timer.new" "$CACHE/timer/layout.txt"
 }
 
 # Kindle の時計は数秒ずれていくことがあるので、TIME_SYNC_MIN ごとに NTP で合わせる
@@ -155,6 +173,13 @@ batt_state() {
   fi
   [ "$BATT_LOW_PCT" -gt 0 ] 2>/dev/null && [ "$(batt_level)" -le "$BATT_LOW_PCT" ] 2>/dev/null && echo low
   return 0
+}
+
+# 画面の幅と高さ（eips -i の表記が機種で違っても拾えるよう、行の中を探す）
+screen_size() {
+  eips -i 2>/dev/null | awk '{for (i = 1; i < NF; i++) {
+    if ($i == "xres:" && !x) x = $(i + 1); if ($i == "yres:" && !y) y = $(i + 1) }}
+    END {print (x ? x : 1072), (y ? y : 1448)}'
 }
 
 # 右上に電池マーク。引数は batt_state の値（x は 8 の倍数にそろえる）

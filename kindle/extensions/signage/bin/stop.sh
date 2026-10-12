@@ -13,11 +13,13 @@ lipc-set-prop com.lab126.powerd preventScreenSaver 0 2>/dev/null
 killall touchgrab 2>/dev/null
 
 # 3. サイネージの処理を止める
-for f in "$SIG_PID" "$SIG_WATCH_PID"; do
+for f in "$SIG_PID" "$SIG_WATCH_PID" "$TIMER_PID" "$TICK_PID"; do
   [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null
   rm -f "$f"
 done
 pkill -f "extensions/signage/bin/signage.sh" 2>/dev/null
+pkill -f "extensions/signage/bin/timer.sh" 2>/dev/null
+rm -f "$TIMER_FIFO" "$TIMER_SHOWN"
 pkill -f "lipc-wait-event com.lab126.powerd goingToScreenSaver$" 2>/dev/null
 log "signage stopped"
 

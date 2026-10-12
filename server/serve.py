@@ -333,6 +333,8 @@ def main():
         print("すでに裏で起動しています（python serve.py status で確認 / stop で停止）")
         return 1
     render_once(out_dir, a.demo)
+    # タイマー画面は天気や時刻で変わらないので起動時に1回だけ描く
+    render.save_timer(out_dir, cfg)
     threading.Thread(target=scheduler, args=(out_dir, a.demo, int(cfg.get("refresh_minutes", 10))), daemon=True).start()
     if not a.demo:
         threading.Thread(target=weather_loop, args=(out_dir, int(cfg.get("weather_minutes", 30))), daemon=True).start()
