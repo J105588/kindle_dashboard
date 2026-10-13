@@ -103,6 +103,7 @@ last=-1; fail=0; prev=""; batt_shown=""; full=1
 while :; do
   slot=$(refresh_slot)
   if [ "$slot" != "$last" ]; then
+    wifi_up
     if fetch_dashboard; then
       fail=0; last=$slot
       time_sync
@@ -111,6 +112,7 @@ while :; do
       # 失敗したら1分後にもう一度（何度も失敗したら次の取得時刻まで待つ）
       [ "$fail" -lt 5 ] || last=$slot
     fi
+    [ "$slot" = "$last" ] && wifi_down
     full=1
   fi
   [ "$kick" = "1" ] && full=1
@@ -142,6 +144,12 @@ while :; do
       batt_shown=$batt
     fi
   fi
-  s=$(date +%s)
-  pause_until $((60 - s % 60))   # 次の「00秒」まで待つ（止められたらすぐ抜ける）
+  s=$(date +%s); w=$((60 - s % 60))
+  # Wi-Fi はつながるまで十数秒かかるので、取りに行く分の30秒前につなぎ始めて時計の更新を遅らせない
+  if [ "$WIFI_SAVE" = "1" ] && [ "$w" -gt 30 ] && [ "$(refresh_slot $((s + w)))" != "$last" ]; then
+    pause_until $((w - 30))
+    [ "$kick" = "1" ] || { wifi_up nowait; pause_until 30; }
+  else
+    pause_until "$w"   # 次の「00秒」まで待つ（止められたらすぐ抜ける）
+  fi
 done

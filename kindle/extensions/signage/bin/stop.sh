@@ -8,6 +8,14 @@ rm -f "$FROZEN_FLAG"
 killall -CONT JunoStatusBarDriver 2>/dev/null
 lipc-set-prop com.lab126.pillow disableEnablePillow enable 2>/dev/null
 lipc-set-prop com.lab126.powerd preventScreenSaver 0 2>/dev/null
+if [ -f "$FL_SAVE" ]; then
+  lipc-set-prop com.lab126.powerd flIntensity "$(cat "$FL_SAVE")" 2>/dev/null
+  rm -f "$FL_SAVE"
+fi
+if [ -f "$WIFI_OFF_FLAG" ]; then
+  lipc-set-prop com.lab126.cmd wirelessEnable 1 2>/dev/null
+  rm -f "$WIFI_OFF_FLAG"
+fi
 
 # 2. タッチの独占を解除（画面が再開してから解除するので、溜まったタップは無い）
 killall touchgrab 2>/dev/null

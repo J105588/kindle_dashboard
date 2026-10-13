@@ -55,6 +55,11 @@ BATT_CHG_ICON=1
 
 # Signage: Start 時に Wi-Fi を自動でONにする（1=する / 0=しない）
 WIFI_AUTO_ON=1
+# 背景を取りに行くときだけ Wi-Fi をつなぎ、それ以外は切る（電池の節約。1=する / 0=つなぎっぱなし）
+# つなぎっぱなしは電池を大きく使う。サイネージ中に SSH や kindlectl.py を使うときは 0 に
+WIFI_SAVE=1
+# サイネージ中はフロントライトを消す（1=消す / 0=そのまま）。終了すると元の明るさに戻る
+FRONTLIGHT_OFF=1
 
 # ---- スクリーンセーバー（Screensaver: ON / OFF で切り替え）----
 # images    … /mnt/us/signage/screensaver の画像を表示（スリープのたびに次の画像）

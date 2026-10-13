@@ -18,6 +18,8 @@ TIMER_PID=/var/tmp/signage_timer.pid
 TICK_PID=/var/tmp/signage_tick.pid
 TIMER_FIFO=/var/tmp/signage_input.fifo
 TIMER_SHOWN=/var/tmp/signage_timer_shown   # タイマー画面を出している間だけある（signage.sh は描かない）
+WIFI_OFF_FLAG=/var/tmp/signage_wifi_off     # サイネージが Wi-Fi を切っている間だけある（stop.sh が戻す）
+FL_SAVE=/var/tmp/signage_fl                 # 消す前のフロントライトの明るさ
 
 . "$EXT/config.sh"
 # 古い config.sh に無い項目の既定値
@@ -25,6 +27,7 @@ TIMER_SHOWN=/var/tmp/signage_timer_shown   # タイマー画面を出してい�
 : "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=15}"
 : "${BATT_CHG_ICON:=1}" "${TIMER_ENABLE:=1}" "${TIMER_FLASH:=3}" "${TIMER_FLASH_REST:=5}" "${TIMER_FLASH_MIN:=5}" "${TIMER_ECO_SEC:=15}" "${TOUCH_DEBUG:=0}"
 : "${TOUCH_SWAP_XY:=0}" "${TOUCH_FLIP_X:=0}" "${TOUCH_FLIP_Y:=0}"
+: "${WIFI_SAVE:=1}" "${FRONTLIGHT_OFF:=1}"
 : "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}" "${DASH_REFRESH_OFFSET:=9}"
 TIME_SYNC_STAMP=/var/tmp/signage_timesync
 mkdir -p "$CACHE/clock" "$DATA/slides" "$DATA/screensaver"
@@ -75,6 +78,19 @@ wifi_wait() { # 最大 $1 秒、Wi-Fi接続を待つ
   return 1
 }
 
+wifi_up() {
+  [ "$WIFI_SAVE" = "1" ] || return 0
+  lipc-set-prop com.lab126.cmd wirelessEnable 1 2>/dev/null
+  rm -f "$WIFI_OFF_FLAG"
+  [ "$1" = "nowait" ] || wifi_wait 30
+}
+
+wifi_down() {
+  [ "$WIFI_SAVE" = "1" ] || return 0
+  lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null
+  touch "$WIFI_OFF_FLAG"
+}
+
 # サーバーからダッシュボード一式を取得（時計の数字は版が変わったときだけ）
 fetch_dashboard() {
   download "$SERVER_URL/layout.txt" "$CACHE/layout.new" || { log "server unreachable: $SERVER_URL"; return 1; }
@@ -107,8 +123,8 @@ time_sync() {
 
 # 背景を取り直す区切りの番号。開始時刻からではなく時計の分にそろえて進めることで、
 # GitHub Actions が公開し終わった直後（10分間隔・オフセット9なら 09,19,…,59分）に取りに行ける
-refresh_slot() {
-  _m=$(( ($(date +%s) + TZ_OFFSET_MIN * 60) / 60 - DASH_REFRESH_OFFSET ))
+refresh_slot() { # 引数=時刻（date +%s）。省略で今
+  _m=$(( (${1:-$(date +%s)} + TZ_OFFSET_MIN * 60) / 60 - DASH_REFRESH_OFFSET ))
   echo $(( _m / DASH_REFRESH_MIN ))
 }
 
