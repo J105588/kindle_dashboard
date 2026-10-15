@@ -26,6 +26,9 @@ kindlectl — SSH 経由で Kindle を操作するツール（PC から実行）
   python kindlectl.py get [SS_METHOD]        … 設定を見る
   python kindlectl.py shell                  … Kindle にログイン
 
+Kindle が省電力で Wi-Fi を切っているとき（WIFI_SAVE=1）は、次につながるまで待ってから実行します
+（最大 config.json の "kindle": {"wait_min": 12} 分。Ctrl+C で中止）
+
 Google Drive 同期（詳しくは gdrive.py）
   python kindlectl.py gdrive-setup           … rclone・Google ログイン・Kindle への転送・初回同期
   python kindlectl.py gdrive-sync | gdrive-status | gdrive-ls | gdrive-log
@@ -40,9 +43,11 @@ import os
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import tarfile
+import time
 import types
 
 import gdrive
@@ -56,6 +61,10 @@ LOCAL_EXT = os.path.normpath(os.path.join(HERE, "..", "kindle", "extensions", "s
 
 
 class KindleError(Exception):
+    pass
+
+
+class KindleOffline(KindleError):
     pass
 
 
@@ -84,14 +93,47 @@ def ssh_base(k):
 # SSH で入ったときの PATH は最小限（/usr/bin:/bin）なので、eips（/usr/sbin）などが見つからない。
 # KUAL から動かすときと同じ PATH にそろえてから実行する
 KINDLE_PATH = "export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/mnt/us/usbnet/bin:$PATH; "
+# サイネージは WIFI_SAVE で Wi-Fi を切るので、操作中は切らないよう Kindle の時計で時刻を残す（common.sh の wifi_busy）
+KINDLE_HOLD = "date +%s > /var/tmp/signage_wifi_hold 2>/dev/null; "
+
+
+def port_open(k, timeout=3):
+    try:
+        socket.create_connection((k["host"], int(k.get("port", 22))), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
+
+def wait_online(k):
+    """Kindle は WIFI_SAVE=1 だと背景を取りに行く前後（DASH_REFRESH_MIN 分ごとに1〜2分）しか
+    Wi-Fi につながらないので、その間を狙って SSH の口が開くのを待つ。wait_min=0 なら待たない"""
+    limit = float(k.get("wait_min", 12)) * 60
+    if limit <= 0:
+        return False
+    print(f"Kindle の Wi-Fi がつながるのを待っています（最大 {limit / 60:g} 分。Ctrl+C で中止）…",
+          file=sys.stderr, flush=True)
+    end = time.monotonic() + limit
+    while time.monotonic() < end:
+        if port_open(k):
+            time.sleep(2)   # つながった直後は sshd の応答が遅れることがある
+            return True
+        time.sleep(2)
+    return False
 
 
 def remote(k, script, data=None, check=True):
     """Kindle 上で sh スクリプトを実行。data を渡すと標準入力に流す"""
     # serve.py をウィンドウ無しで動かしているとき、ssh のたびに黒い窓が出ないようにする
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    p = subprocess.run(ssh_base(k) + [KINDLE_PATH + script], input=data, capture_output=True,
-                       creationflags=flags)
+    run = lambda: subprocess.run(ssh_base(k) + [KINDLE_PATH + KINDLE_HOLD + script], input=data,
+                                 capture_output=True, creationflags=flags)
+    p = run()
+    if p.returncode == 255 and not port_open(k):
+        if not wait_online(k):
+            raise KindleOffline("Kindle が Wi-Fi につながっていません（省電力で切れているか、スリープ中）\n"
+                                "  ・サイネージ中なら数分以内につながるので、もう一度試してください")
+        p = run()
     out = p.stdout.decode("utf-8", "replace")
     err = "\n".join(l for l in p.stderr.decode("utf-8", "replace").splitlines()
                     if l.strip() and "Welcome to Kindle" not in l)
@@ -357,18 +399,21 @@ def main():
             script = {"start": "start.sh", "stop": "stop.sh", "ss-on": "ss_on.sh",
                       "ss-off": "ss_off.sh", "preview": "ss_test.sh"}[a.cmd]
             remote(k, sh_script(script) if a.cmd != "preview" else f"(setsid sh {EXT}/bin/ss_test.sh >/dev/null 2>&1 </dev/null &)")
-            import time
             time.sleep(2)   # 起動・停止が反映されるのを待ってから状態を表示
             print(f"{a.cmd}: OK  →  " + " ".join(f"{x}={y}" for x, y in get_state(k).items()))
         elif a.cmd == "log":
             print(remote(k, f"tail -n {int(a.n)} {DATA}/signage.log 2>/dev/null; true"))
         elif a.cmd == "shell":
+            if not port_open(k) and not wait_online(k):
+                raise KindleOffline("Kindle が Wi-Fi につながっていません")
             args = ["ssh", "-p", str(k.get("port", 22))]
             if k.get("identity"):
                 args += ["-i", os.path.expanduser(k["identity"])]
             sys.exit(subprocess.call(args + [f"{k.get('user', 'root')}@{k['host']}"]))
     except KindleError as e:
         sys.exit(f"エラー: {e}")
+    except KeyboardInterrupt:
+        sys.exit("中止しました")
 
 
 if __name__ == "__main__":

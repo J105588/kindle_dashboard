@@ -99,7 +99,7 @@ fi
 
 # ---- ダッシュボード ----
 [ "$WIFI_AUTO_ON" = "1" ] && wifi_wait 30
-last=-1; fail=0; prev=""; batt_shown=""; full=1
+last=-1; fail=0; prev=""; batt_shown=""; full=1; wifi_off_at=""
 while :; do
   slot=$(refresh_slot)
   if [ "$slot" != "$last" ]; then
@@ -112,8 +112,12 @@ while :; do
       # 失敗したら1分後にもう一度（何度も失敗したら次の取得時刻まで待つ）
       [ "$fail" -lt 5 ] || last=$slot
     fi
-    [ "$slot" = "$last" ] && wifi_down
+    # 取り終えてもすぐには切らず、PC（kindlectl.py・スマホ送信）がつなぎに来られる時間を残す
+    [ "$slot" = "$last" ] && wifi_off_at=$(( $(date +%s) + WIFI_LINGER_SEC ))
     full=1
+  fi
+  if [ -n "$wifi_off_at" ] && [ "$(date +%s)" -ge "$wifi_off_at" ] && wifi_down; then
+    wifi_off_at=""
   fi
   [ "$kick" = "1" ] && full=1
   kick=0

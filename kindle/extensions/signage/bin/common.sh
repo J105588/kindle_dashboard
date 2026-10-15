@@ -20,6 +20,7 @@ TIMER_FIFO=/var/tmp/signage_input.fifo
 TIMER_SHOWN=/var/tmp/signage_timer_shown   # タイマー画面を出している間だけある（signage.sh は描かない）
 WIFI_OFF_FLAG=/var/tmp/signage_wifi_off     # サイネージが Wi-Fi を切っている間だけある（stop.sh が戻す）
 FL_SAVE=/var/tmp/signage_fl                 # 消す前のフロントライトの明るさ
+WIFI_HOLD=/var/tmp/signage_wifi_hold        # PC から操作された時刻（kindlectl.py が書く）
 
 . "$EXT/config.sh"
 # 古い config.sh に無い項目の既定値
@@ -27,7 +28,7 @@ FL_SAVE=/var/tmp/signage_fl                 # 消す前のフロントライト�
 : "${GRAB_TOUCH:=1}" "${TAP_EXIT:=3}" "${SS_METHOD:=auto}" "${BATT_LOW_PCT:=15}"
 : "${BATT_CHG_ICON:=1}" "${TIMER_ENABLE:=1}" "${TIMER_FLASH:=3}" "${TIMER_FLASH_REST:=5}" "${TIMER_FLASH_MIN:=5}" "${TIMER_ECO_SEC:=15}" "${TOUCH_DEBUG:=0}"
 : "${TOUCH_SWAP_XY:=0}" "${TOUCH_FLIP_X:=0}" "${TOUCH_FLIP_Y:=0}"
-: "${WIFI_SAVE:=1}" "${FRONTLIGHT_OFF:=1}"
+: "${WIFI_SAVE:=1}" "${FRONTLIGHT_OFF:=1}" "${WIFI_LINGER_SEC:=60}" "${WIFI_HOLD_MIN:=10}"
 : "${NTP_SERVER=ntp.nict.jp}" "${TIME_SYNC_MIN:=60}" "${DASH_REFRESH_OFFSET:=9}"
 TIME_SYNC_STAMP=/var/tmp/signage_timesync
 mkdir -p "$CACHE/clock" "$DATA/slides" "$DATA/screensaver"
@@ -85,8 +86,17 @@ wifi_up() {
   [ "$1" = "nowait" ] || wifi_wait 30
 }
 
-wifi_down() {
+# PC から操作中は切らない。kindlectl.py はコマンドのたびに時刻を書くので、最後の操作から WIFI_HOLD_MIN 分は保つ。
+# shell（対話ログイン）は時刻を書けないので、SSH の接続が残っているかも見る
+wifi_busy() {
+  _h=$(cat "$WIFI_HOLD" 2>/dev/null)
+  [ -n "$_h" ] && [ $(( $(date +%s) - _h )) -lt $((WIFI_HOLD_MIN * 60)) ] 2>/dev/null && return 0
+  netstat -tn 2>/dev/null | awk '$6 == "ESTABLISHED" && $4 ~ /:22$/ {f = 1} END {exit !f}'
+}
+
+wifi_down() { # 切れなかったら 1
   [ "$WIFI_SAVE" = "1" ] || return 0
+  wifi_busy && return 1
   lipc-set-prop com.lab126.cmd wirelessEnable 0 2>/dev/null
   touch "$WIFI_OFF_FLAG"
 }

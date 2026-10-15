@@ -6,6 +6,7 @@
 import html
 import io
 import os
+import threading
 from email.parser import BytesParser
 from email.policy import default as email_default
 
@@ -13,6 +14,12 @@ import kindlectl
 import render
 
 MAX_BODY = 120 * 1024 * 1024  # 一度に送れる合計サイズ
+
+# Kindle が省電力で Wi-Fi を切っている間に受けた画像。次に Wi-Fi がつながったら裏で送る
+# （ブラウザを最大10分待たせるとスマホ側が先に切ってしまうため）
+_pending_lock = threading.Lock()
+_pending = []          # [(images, to, replace, show)]
+_pending_note = ""     # 直近の裏送信の結果（画面に出す）
 
 PAGE = """<!doctype html>
 <html lang="ja"><head>
@@ -87,7 +94,34 @@ PAGE = """<!doctype html>
 </main></body></html>"""
 
 
+def _flush_pending(k):
+    global _pending_note
+    while True:
+        with _pending_lock:
+            images, to, replace, show = _pending[0]
+        # 送っている間（Wi-Fi 待ちで最大十数分）も画面を出せるよう、ロックは持たない
+        try:
+            kindlectl.push_images(k, images, to, replace, show)
+            _pending_note = f"待っていた {len(images)} 枚を送りました"
+        except kindlectl.KindleError as e:
+            _pending_note = f"待っていた画像を送れませんでした: {e}"
+        # 取り出しと空の確認を同じロックの中で行う（_queue が新しいスレッドを立てるかの判定とずれないように）
+        with _pending_lock:
+            _pending.pop(0)
+            if not _pending:
+                return
+
+
+def _queue(k, images, to, replace, show):
+    with _pending_lock:
+        _pending.append((images, to, replace, show))
+        start = len(_pending) == 1
+    if start:
+        threading.Thread(target=_flush_pending, args=(k,), daemon=True).start()
+
+
 def _state_and_list(k):
+    k = dict(k, wait_min=0)   # 画面を出すたびに Wi-Fi を待たない
     try:
         st = kindlectl.get_state(k)
         status = f"接続中・サイネージ {'動作中' if st['signage'] == 'running' else '停止'}・スクリーンセーバー {st['screensaver'].upper()}"
@@ -98,6 +132,9 @@ def _state_and_list(k):
             more = f"<li>…ほか {len(names) - 8} 枚</li>" if len(names) > 8 else ""
             parts.append(f"<p class='list' style='padding:0'><b>{label}</b>（{len(names)} 枚）</p><ul class='list'>{more}{items}</ul>")
         return status, "#2e7d32", "".join(parts)
+    except kindlectl.KindleOffline:
+        return ("Kindle は省電力で Wi-Fi を切っています（数分ごとにつながり、そのとき送ります）",
+                "#b8860b", "")
     except kindlectl.KindleError as e:
         return "Kindle に接続できません（Wi-Fi・SSH を確認）", "#b23", f"<p class='list'>{html.escape(str(e))}</p>"
 
@@ -109,6 +146,12 @@ def page(message=""):
         status, dot, listing = _state_and_list(k)
     except kindlectl.KindleError as e:
         status, dot, listing = html.escape(str(e)), "#b23", ""
+    with _pending_lock:
+        n = sum(len(i) for i, *_ in _pending)
+    if n:
+        status += f"・送信待ち {n} 枚"
+    elif _pending_note:
+        status += f"・{_pending_note}"
     pin_field = ""
     if cfg.get("upload_pin"):
         pin_field = ('<fieldset><legend>PIN</legend><input class="pin" type="password" name="pin" '
@@ -166,14 +209,19 @@ def handle_post(ctype, body):
             failed.append(f"{fname}: 画像として読み込めませんでした")
 
     to = fields.get("to") if fields.get("to") in kindlectl.TARGETS else "screensaver"
-    try:
-        _, k = kindlectl.load_cfg()
-        if images:
-            kindlectl.push_images(k, images, to, bool(fields.get("replace")), bool(fields.get("show")))
-    except kindlectl.KindleError as e:
-        return 502, page(f'<div class="msg err"><b>Kindle に送れませんでした</b><ul><li>{html.escape(str(e))}</li></ul></div>')
-
     label = "スクリーンセーバー" if to == "screensaver" else "スライドショー"
     items = "".join(f"<li>{html.escape(n)}</li>" for n in images)
     items += "".join(f"<li>✗ {html.escape(f)}</li>" for f in failed)
+    replace, show = bool(fields.get("replace")), bool(fields.get("show"))
+    try:
+        _, k = kindlectl.load_cfg()
+        if images:
+            kindlectl.push_images(dict(k, wait_min=0), images, to, replace, show)
+    except kindlectl.KindleOffline:
+        _queue(k, images, to, replace, show)
+        return 202, page(f'<div class="msg"><b>Kindle の Wi-Fi が切れているので、次につながったときに{label}へ送ります</b>'
+                         f'（サイネージ中なら最大10分ほど。このページは閉じて大丈夫です）<ul>{items}</ul></div>')
+    except kindlectl.KindleError as e:
+        return 502, page(f'<div class="msg err"><b>Kindle に送れませんでした</b><ul><li>{html.escape(str(e))}</li></ul></div>')
+
     return 200, page(f'<div class="msg"><b>{len(images)} 枚を{label}に送りました</b><ul>{items}</ul></div>')

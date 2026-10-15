@@ -56,8 +56,12 @@ BATT_CHG_ICON=1
 # Signage: Start 時に Wi-Fi を自動でONにする（1=する / 0=しない）
 WIFI_AUTO_ON=1
 # 背景を取りに行くときだけ Wi-Fi をつなぎ、それ以外は切る（電池の節約。1=する / 0=つなぎっぱなし）
-# つなぎっぱなしは電池を大きく使う。サイネージ中に SSH や kindlectl.py を使うときは 0 に
+# 切れている間に kindlectl.py やスマホ送信を使うと、次に Wi-Fi がつながったとき（最大 DASH_REFRESH_MIN 分後）に送られる
 WIFI_SAVE=1
+# 背景を取り終えてから Wi-Fi を切るまでの秒数（この間に PC からの送信を受け付ける）
+WIFI_LINGER_SEC=60
+# PC から操作されたら、最後の操作からこの分数は Wi-Fi を切らない
+WIFI_HOLD_MIN=10
 # サイネージ中はフロントライトを消す（1=消す / 0=そのまま）。終了すると元の明るさに戻る
 FRONTLIGHT_OFF=1
 
